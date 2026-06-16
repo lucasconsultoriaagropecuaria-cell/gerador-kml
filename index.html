@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gerador de KML — BB Pl@ntar</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root{ --verde:#2e7d32; --verde2:#1b5e20; --cinza:#e5e7eb; --borda:#cfd4dc; }
+  *{box-sizing:border-box;font-family:Segoe UI,Roboto,Arial,sans-serif}
+  body{margin:0;background:#f3f5f7;color:#1f2937}
+  header{background:#fff;color:#1f2937;padding:16px 26px;border-bottom:4px solid var(--verde);
+         display:flex;align-items:center;gap:20px}
+  header .htxt{min-width:0}
+  header h1{margin:0;font-size:19px;color:var(--verde2)}
+  header p{margin:4px 0 0;color:#4b5563;font-size:13px}
+  .wrap{max-width:920px;margin:24px auto;padding:0 18px}
+  .card{background:#fff;border:1px solid var(--borda);border-radius:10px;padding:20px;margin-bottom:18px}
+  label{font-weight:600;font-size:13px;display:block;margin-bottom:6px}
+  #drop{border:2px dashed var(--verde);border-radius:10px;padding:34px;text-align:center;color:#4b5563;
+        background:#f6fbf6;cursor:pointer;transition:.15s}
+  #drop.hover{background:#e8f5e9}
+  #drop b{color:var(--verde2)}
+  .btn{background:var(--verde);color:#fff;border:0;border-radius:8px;padding:12px 22px;font-size:15px;
+       font-weight:600;cursor:pointer}
+  .btn:disabled{background:#9ca3af;cursor:not-allowed}
+  .btn.sec{background:#fff;color:var(--verde2);border:1px solid var(--verde)}
+  table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
+  th,td{border:1px solid var(--borda);padding:7px 9px;text-align:left}
+  th{background:var(--cinza)}
+  td.c{text-align:center}
+  .tag{display:inline-block;background:#e8f5e9;color:var(--verde2);border-radius:20px;padding:2px 10px;font-size:12px;font-weight:600}
+  .muted{color:#6b7280;font-size:12px}
+  #log{font-size:12px;color:#b91c1c;white-space:pre-wrap;margin-top:8px}
+  .ok{color:var(--verde2)!important}
+  .foot{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:16px}
+  a.dl{color:var(--verde2);text-decoration:none;font-weight:600}
+  a.dl:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<header>
+  <div class="htxt">
+    <h1>Gerador de KML — Glebas BB Pl@ntar</h1>
+    <p>Arraste os PDFs do BB Pl@ntar (ou KMLs) e baixe os KMLs prontos. Tudo roda no seu navegador — nada é enviado para a internet.</p>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="card">
+    <label>Documentos das glebas (PDF do BB Pl@ntar ou KML)</label>
+    <div id="drop">📂 <b>Clique aqui</b> ou arraste os arquivos<br>
+      <span class="muted">Pode soltar vários de uma vez. O nome de cada gleba sai como “<i>NOME do documento - área ha</i>”.</span>
+    </div>
+    <input type="file" id="files" accept=".pdf,.kml" multiple style="display:none">
+    <div id="lista"></div>
+    <div id="log"></div>
+    <div class="foot">
+      <button class="btn" id="gerar" disabled>⬇️ Gerar KML (ZIP)</button>
+      <button class="btn sec" id="limpar">Limpar</button>
+      <span class="muted" id="resumo"></span>
+    </div>
+    <div id="links"></div>
+  </div>
+
+  <p class="muted">O polígono é mantido <b>completo</b> (todos os pontos do documento). Estilo padrão: linha amarela
+  largura 5 e área amarela 20% de opacidade. Gera um KML por gleba + um KML consolidado com todas as glebas.</p>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+let glebas = [];   // {nome, area, areaNum, ident, coords:[[lat,lon]...], origem, arquivo}
+
+/* ---------- LEITURA PDF (mesma extração validada da planilha) ---------- */
+async function lerPDF(file){
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+  let textoTudo = "";
+  for(let p=1;p<=pdf.numPages;p++){
+    const page = await pdf.getPage(p);
+    const tc = await page.getTextContent();
+    for(const it of tc.items){ textoTudo += it.str + " "; }
+  }
+  let desc=null, area=null, benef=null, ident=null;
+  const ma = textoTudo.match(/Capturada\s*\(\s*ha\s*\)\s+(\d+,\d+)/)
+          || textoTudo.match(/(\d+,\d+)\s+(\d+,\d+)\s+(\d+,\d+)\s+Arquivo/);
+  if(ma) area = ma[1];
+  const md = textoTudo.match(/Gleba\s+([\s\S]+?)\s+\S*rea\s+Capturada/);
+  if(md) desc = md[1].trim();
+  const mb = textoTudo.match(/Nome\s+([\s\S]+?)\s+Benefici/)
+          || textoTudo.match(/Benefici\S*\s+([\s\S]+?)\s+CPF/);
+  if(mb) benef = mb[1].trim();
+  const mi = textoTudo.match(/(\d{6,}-\d{6,})/);
+  if(mi) ident = mi[1];
+  if(!desc) desc = benef;
+  const coords = extrairCoords(textoTudo);
+  return {desc, area, coords, benef, ident};
+}
+
+function extrairCoords(texto){
+  const re = /(\d+)\s+(-?\d+\.\d{3,})\s+(-?\d+\.\d{3,})/g;
+  let m, arr=[];
+  while((m=re.exec(texto))!==null){
+    arr.push([parseInt(m[1]), parseFloat(m[2]), parseFloat(m[3])]);
+  }
+  arr.sort((a,b)=>a[0]-b[0]);
+  return arr.map(x=>[x[1],x[2]]);   // [lat, lon]
+}
+
+/* ---------- LEITURA KML ---------- */
+async function lerKML(file){
+  const txt = await file.text();
+  const doc = new DOMParser().parseFromString(txt,"text/xml");
+  const node = doc.getElementsByTagName("coordinates")[0];
+  let coords=[];
+  if(node){
+    for(const tok of node.textContent.trim().split(/\s+/)){
+      const p = tok.split(",");
+      if(p.length>=2) coords.push([parseFloat(p[1]), parseFloat(p[0])]);
+    }
+  }
+  const base = file.name.replace(/\.[^.]+$/,"");
+  const ma = base.match(/(\d+[.,]\d+)\s*ha/i);
+  const area = ma ? ma[1].replace(".",",") : "";
+  const desc = base.replace(/[_\s]*\d+[.,]\d+\s*ha.*$/i,"").replace(/_/g," ").trim();
+  // tenta achar o identificador dentro do KML
+  let ident=null;
+  const mi = txt.match(/(\d{6,}-\d{6,})/);
+  if(mi) ident=mi[1];
+  return {desc, area, coords, ident};
+}
+
+/* ---------- MONTAGEM DA GLEBA ---------- */
+function areaDoArquivo(nome){
+  const m = nome.match(/(\d+(?:,\d+)?)\s*ha\b/i);
+  return m ? m[1] : "";
+}
+function nomeGleba(desc, area){
+  const d = (desc||"").trim();
+  return area ? `${d} - ${area} ha` : d;
+}
+function montaGleba(r, origem, arquivo){
+  if(!r.coords || r.coords.length<3) return null;
+  const baseDesc = (r.desc || arquivo.replace(/\.[^.]+$/,"")).trim();
+  const area = r.area || areaDoArquivo(arquivo);
+  const areaNum = area ? parseFloat(area.replace(",",".")) : 0;
+  return {
+    nome: nomeGleba(baseDesc, area),
+    area, areaNum,
+    ident: r.ident || "",
+    coords: r.coords.slice(),
+    origem, arquivo
+  };
+}
+
+/* ---------- GERAÇÃO DO KML ---------- */
+const STYLE =
+`  <Style id="yellow_area">
+    <LineStyle>
+      <color>ff00ffff</color>
+      <width>5</width>
+    </LineStyle>
+    <PolyStyle>
+      <color>3300ffff</color>
+      <fill>1</fill>
+      <outline>1</outline>
+    </PolyStyle>
+  </Style>`;
+
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function fmt(v){ return v.toFixed(6).replace(/0+$/,"").replace(/\.$/,""); }  // -49.053512
+
+function placemark(g){
+  let ring = g.coords.slice();
+  if(ring.length && (ring[0][0]!==ring[ring.length-1][0] || ring[0][1]!==ring[ring.length-1][1]))
+    ring.push(ring[0]);                                  // fecha o anel
+  const cs = ring.map(([la,lo])=>`            ${fmt(lo)},${fmt(la)},0`).join("\n");
+  const parts=[];
+  if(g.ident) parts.push(`Identificador: ${g.ident}`);
+  if(g.area)  parts.push(`Área capturada/financiável: ${g.area} ha`);
+  const desc = parts.join("<br/>");
+  return `  <Placemark>
+    <name>${esc(g.nome)}</name>
+    <description><![CDATA[${desc}]]></description>
+    <styleUrl>#yellow_area</styleUrl>
+    <Polygon>
+      <tessellate>1</tessellate>
+      <outerBoundaryIs>
+        <LinearRing>
+          <coordinates>
+${cs}
+          </coordinates>
+        </LinearRing>
+      </outerBoundaryIs>
+    </Polygon>
+  </Placemark>`;
+}
+
+function kmlDoc(docName, placemarks){
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+  <name>${esc(docName)}</name>
+${STYLE}
+
+${placemarks.join("\n\n")}
+</Document>
+</kml>
+`;
+}
+
+function nomeArquivo(nome){ return nome.replace(/[<>:"/\\|?*]/g,"_").trim() || "gleba"; }
+
+async function gerar(){
+  const ordenadas = glebas.slice().sort((a,b)=>a.areaNum-b.areaNum);
+  const zip = new JSZip();
+  let total = 0;
+  for(const g of ordenadas){
+    zip.file(nomeArquivo(g.nome)+".kml", kmlDoc(g.nome, [placemark(g)]));
+    total += g.areaNum || 0;
+  }
+  if(ordenadas.length>1){
+    const totalStr = total.toFixed(2).replace(".",",");
+    const consName = `Consolidado - ${totalStr} ha`;
+    zip.file(nomeArquivo(consName)+".kml", kmlDoc(consName, ordenadas.map(placemark)));
+  }
+  const blob = await zip.generateAsync({type:"blob"});
+  baixar(blob, "KMLs_glebas.zip");
+  mostrarLinks(ordenadas);
+}
+
+/* links individuais para baixar 1 KML de cada vez (além do ZIP) */
+function mostrarLinks(ordenadas){
+  const div = document.getElementById("links");
+  let h = `<p class="muted" style="margin-top:14px">Ou baixe individualmente:</p><ul>`;
+  for(const g of ordenadas){
+    const url = URL.createObjectURL(new Blob([kmlDoc(g.nome,[placemark(g)])], {type:"application/vnd.google-earth.kml+xml"}));
+    h += `<li><a class="dl" href="${url}" download="${nomeArquivo(g.nome)}.kml">📍 ${esc(g.nome)}</a></li>`;
+  }
+  if(ordenadas.length>1){
+    const total = ordenadas.reduce((s,g)=>s+(g.areaNum||0),0).toFixed(2).replace(".",",");
+    const consName = `Consolidado - ${total} ha`;
+    const url = URL.createObjectURL(new Blob([kmlDoc(consName, ordenadas.map(placemark))], {type:"application/vnd.google-earth.kml+xml"}));
+    h += `<li><a class="dl" href="${url}" download="${nomeArquivo(consName)}.kml">📍 ${esc(consName)}</a></li>`;
+  }
+  h += "</ul>";
+  div.innerHTML = h;
+}
+
+function baixar(blob, nome){
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download=nome; a.click();
+}
+
+/* ---------- UI ---------- */
+const drop=document.getElementById("drop"), inp=document.getElementById("files"),
+      lista=document.getElementById("lista"), log=document.getElementById("log");
+drop.onclick=()=>inp.click();
+drop.ondragover=e=>{e.preventDefault();drop.classList.add("hover");};
+drop.ondragleave=()=>drop.classList.remove("hover");
+drop.ondrop=e=>{e.preventDefault();drop.classList.remove("hover");addFiles(e.dataTransfer.files);};
+inp.onchange=()=>addFiles(inp.files);
+document.getElementById("limpar").onclick=()=>{ glebas=[]; render(); log.textContent="";
+  document.getElementById("links").innerHTML=""; };
+document.getElementById("gerar").onclick=async()=>{
+  try{ await gerar(); log.textContent="✔ KMLs gerados e baixados (ZIP)."; log.className="ok"; }
+  catch(err){ log.className=""; log.textContent="Erro ao gerar: "+err.message; console.error(err); }
+};
+
+async function addFiles(fileList){
+  log.className=""; log.textContent="";
+  for(const file of fileList){
+    try{
+      const ext=file.name.toLowerCase().split(".").pop();
+      let r, origem;
+      if(ext==="pdf"){ r=await lerPDF(file); origem="PDF"; }
+      else if(ext==="kml"){ r=await lerKML(file); origem="KML"; }
+      else { continue; }
+      const g=montaGleba(r,origem,file.name);
+      if(!g){ log.textContent+=`⚠ ${file.name}: não encontrei coordenadas.\n`; continue; }
+      glebas.push(g);
+    }catch(err){ log.textContent+=`⚠ ${file.name}: ${err.message}\n`; }
+  }
+  render();
+}
+
+function render(){
+  // dedup preferindo PDF sobre KML para a mesma gleba
+  const byKey={};
+  for(const g of glebas){
+    const k=(g.ident||"")+"|"+g.areaNum+"|"+g.nome;
+    if(!byKey[k] || (byKey[k].origem!=="PDF" && g.origem==="PDF")) byKey[k]=g;
+  }
+  glebas=Object.values(byKey).sort((a,b)=>a.areaNum-b.areaNum);
+  document.getElementById("links").innerHTML="";
+  if(!glebas.length){ lista.innerHTML=""; document.getElementById("gerar").disabled=true;
+    document.getElementById("resumo").textContent=""; return; }
+  let h=`<table><thead><tr><th>#</th><th>Nome do KML</th><th>Área (ha)</th><th>Identificador</th><th>Pontos</th><th>Origem</th></tr></thead><tbody>`;
+  glebas.forEach((g,i)=>{
+    h+=`<tr><td class="c">${i+1}</td><td>${esc(g.nome)}</td><td class="c">${g.area||"—"}</td>
+        <td class="c">${g.ident||"—"}</td>
+        <td class="c"><span class="tag">${g.coords.length}</span></td><td class="c">${g.origem}</td></tr>`;
+  });
+  h+="</tbody></table>";
+  lista.innerHTML=h;
+  document.getElementById("gerar").disabled=false;
+  const total=glebas.reduce((s,g)=>s+(g.areaNum||0),0).toFixed(2).replace(".",",");
+  document.getElementById("resumo").textContent=`${glebas.length} gleba(s) — total ${total} ha.`;
+}
+</script>
+</body>
+</html>
