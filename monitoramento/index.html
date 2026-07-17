@@ -1,0 +1,48 @@
+<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Painel — Fazendas</title>
+<style>
+ :root{--bg:#0f1419;--card:#1a212b;--ink:#e6edf3;--mut:#8b98a5;--line:#2a3340}
+ *{box-sizing:border-box}body{margin:0;font-family:system-ui,Segoe UI,Roboto,sans-serif;
+   background:var(--bg);color:var(--ink)}
+ header{padding:22px 26px;border-bottom:1px solid var(--line)}
+ header h1{margin:0;font-size:22px}header p{margin:4px 0 0;color:var(--mut)}
+ #grid{padding:22px}
+ .produtor{margin-bottom:6px}
+ .ph{font-size:16px;font-weight:600;margin:20px 0 12px;padding-bottom:6px;
+   border-bottom:1px solid var(--line)}
+ .ph span{color:var(--mut);font-weight:400;font-size:13px}
+ .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+ .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+   padding:16px;transition:.15s}
+ .card:hover{border-color:#3b82f6;transform:translateY(-2px)}
+ .card h2{margin:0 0 4px;font-size:17px}.sub{color:var(--mut);font-size:13px;margin-bottom:12px}
+ .badges{display:flex;flex-wrap:wrap;gap:6px}
+ .b{padding:3px 9px;border-radius:20px;font-size:12px}
+ .b.g{background:#10331c;color:#5dd98c}.b.bl{background:#10243f;color:#6ab0ff}
+ .b.r{background:#3a1414;color:#ff8a8a}.b.n{background:#26313f;color:var(--mut)}
+ .links{display:flex;gap:8px;margin-top:12px}
+ .links a{flex:1;text-align:center;text-decoration:none;padding:7px;border-radius:8px;
+   font-size:13px;background:#26313f;color:var(--ink);border:1px solid var(--line)}
+ .links a:hover{border-color:#3b82f6}.links a.laudo{background:#10331c;color:#5dd98c}
+</style></head><body>
+<header><h1>🛰️ Monitoramento de Áreas</h1><p>Áreas por produtor — clique para abrir</p></header>
+<div id="grid"></div>
+<script>
+const C=[{"pasta": "C_S_tres_Marias_26_27_Ag_(1)", "produtor": "Antônio Palhares", "tem_laudo": true, "nome": "C_S_tres_Marias_26_27_Ag (1)", "sub": ["", "24 ha", "2 talhoes"], "perene_pct": 92, "plantios": 1, "remocoes": 0}, {"pasta": "Custeio_Agrícola_Banco_do_Brasil_SA_-_2.026_A", "produtor": "Francisco Cardoso Malta", "tem_laudo": true, "nome": "Custeio Agrícola Banco do Brasil SA - 2.026 A", "sub": ["", "68 ha", "2 talhoes"], "perene_pct": 0, "plantios": 2, "remocoes": 0}, {"pasta": "Custeio_café_25", "produtor": "Altair Zago", "tem_laudo": true, "nome": "Custeio_café_25", "sub": ["", "2 ha", "2 talhoes"], "perene_pct": 100, "plantios": 0, "remocoes": 0}, {"pasta": "Fazenda_Bebedouro", "produtor": "Antônio Palhares", "tem_laudo": true, "nome": "Fazenda Bebedouro", "sub": ["Aguaí/São Paulo", "484 ha", "5 talhoes"], "perene_pct": 45, "plantios": 1, "remocoes": 0}, {"pasta": "Fazenda_Bebedouro_2", "produtor": "Antônio Palhares", "tem_laudo": true, "nome": "Fazenda Bebedouro", "sub": ["Aguaí/São Paulo", "95 ha", "2 talhoes"], "perene_pct": 100, "plantios": 0, "remocoes": 0}, {"pasta": "Fazenda_Indiana", "produtor": "Brayan", "tem_laudo": true, "nome": "Fazenda Indiana", "sub": ["Pirassununga/São Paulo", "93 ha", "2 talhoes"], "perene_pct": 9, "plantios": 0, "remocoes": 1}, {"pasta": "Fazenda_Santa_Tereza", "produtor": "Antônio Palhares", "tem_laudo": true, "nome": "Fazenda Santa Tereza", "sub": ["Pirassununga/São Paulo", "204 ha", "2 talhoes"], "perene_pct": 100, "plantios": 0, "remocoes": 0}, {"pasta": "Fazenda_São_Borjas_I", "produtor": "Antônio Palhares", "tem_laudo": true, "nome": "Fazenda São Borjas I", "sub": ["Pirassununga/São Paulo", "114 ha", "3 talhoes"], "perene_pct": 82, "plantios": 0, "remocoes": 1}, {"pasta": "PlantioMS", "produtor": "Cambuhy", "tem_laudo": true, "nome": "PlantioMS", "sub": [null, "790 ha", "27 quadras"], "perene_pct": 0, "plantios": 7, "remocoes": 0}, {"pasta": "Sítio_Bebedouro", "produtor": "Antônio Palhares", "tem_laudo": true, "nome": "Sítio Bebedouro", "sub": ["Aguaí/São Paulo", "102 ha", "2 talhoes"], "perene_pct": 100, "plantios": 0, "remocoes": 0}, {"pasta": "Sítio_Boa_Esperança", "produtor": "Antônio Palhares", "tem_laudo": true, "nome": "Sítio Boa Esperança", "sub": ["Pirassununga/São Paulo", "35 ha", "3 talhoes"], "perene_pct": 100, "plantios": 0, "remocoes": 0}, {"pasta": "Sítio_Cachoeira_do_Itupeva", "produtor": "Brayan", "tem_laudo": true, "nome": "Sítio Cachoeira do Itupeva", "sub": ["Aguaí/São Paulo", "51 ha", "3 talhoes"], "perene_pct": 79, "plantios": 1, "remocoes": 0}, {"pasta": "Sítio_Cachoeira_do_Itupeva_2", "produtor": "Brayan", "tem_laudo": true, "nome": "Sítio Cachoeira do Itupeva", "sub": ["Aguaí/São Paulo", "12 ha", "2 talhoes"], "perene_pct": 11, "plantios": 1, "remocoes": 0}, {"pasta": "Sítio_Nascente_-_Sítio_São_João", "produtor": "Antônio Palhares", "tem_laudo": true, "nome": "Sítio Nascente - Sítio São João", "sub": ["Pirassununga/São Paulo", "60 ha", "2 talhoes"], "perene_pct": 14, "plantios": 0, "remocoes": 0}, {"pasta": "Sítio_Santa_Rita", "produtor": "Silvio Donizeti", "tem_laudo": true, "nome": "Sítio Santa Rita", "sub": ["Pirassununga/São Paulo", "28 ha", "2 talhoes"], "perene_pct": 15, "plantios": 0, "remocoes": 0}, {"pasta": "Sítio_Santo_Antonio", "produtor": "Pedro Lima", "tem_laudo": true, "nome": "Sítio Santo Antonio", "sub": ["Batatais/São Paulo", "27 ha", "2 talhoes"], "perene_pct": 20, "plantios": 0, "remocoes": 0}, {"pasta": "Sítio_São_Miguel", "produtor": "Brayan", "tem_laudo": true, "nome": "Sítio São Miguel", "sub": ["Aguaí/São Paulo", "48 ha", "2 talhoes"], "perene_pct": 75, "plantios": 1, "remocoes": 0}, {"pasta": "custeio_Março_26_aguaí_mesa", "produtor": "Antônio Palhares", "tem_laudo": true, "nome": "custeio Março_26_aguaí_mesa", "sub": ["", "48 ha", "2 talhoes"], "perene_pct": 100, "plantios": 0, "remocoes": 0}, {"pasta": "custeio_fev_26_aguaí_mesa", "produtor": "Antônio Palhares", "tem_laudo": true, "nome": "custeio fev_26_aguaí_mesa", "sub": ["", "33 ha", "2 talhoes"], "perene_pct": 100, "plantios": 0, "remocoes": 0}];
+function cardHTML(c){
+  const sub=c.sub.filter(Boolean).join(' · ');
+  const b=[`<span class="b g">${c.perene_pct}% perene/APP</span>`];
+  if(c.plantios) b.push(`<span class="b bl">🌱 ${c.plantios} plantio(s)</span>`);
+  if(c.remocoes) b.push(`<span class="b r">⚠ ${c.remocoes} remocao(oes)</span>`);
+  if(!c.plantios&&!c.remocoes) b.push(`<span class="b n">sem mudancas</span>`);
+  const base='./'+encodeURIComponent(c.pasta);
+  const laudo = c.tem_laudo?`<a class="laudo" href="${base}/laudo.html">📄 Laudo</a>`:'';
+  return `<div class="card"><h2>${c.nome}</h2><div class="sub">${sub}</div>
+    <div class="badges">${b.join('')}</div>
+    <div class="links"><a href="${base}/painel.html">🗺️ Painel</a>${laudo}</div></div>`;
+}
+const grupos={}; C.forEach(c=>{(grupos[c.produtor]=grupos[c.produtor]||[]).push(c);});
+document.getElementById('grid').innerHTML = Object.keys(grupos).sort().map(prod=>
+  `<section class="produtor"><div class="ph">👤 ${prod} <span>(${grupos[prod].length} area(s))</span></div>
+   <div class="grid">${grupos[prod].map(cardHTML).join('')}</div></section>`).join('');
+</script></body></html>
