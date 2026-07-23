@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gerador de Planilha de Coordenadas</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<style>
+  :root{ --verde:#2e7d32; --verde2:#1b5e20; --cinza:#e5e7eb; --borda:#cfd4dc; }
+  *{box-sizing:border-box;font-family:Segoe UI,Roboto,Arial,sans-serif}
+  body{margin:0;background:#f3f5f7;color:#1f2937}
+  header{background:#fff;color:#1f2937;padding:16px 26px;border-bottom:4px solid var(--verde);
+         display:flex;align-items:center;gap:20px}
+  header img.logo{height:64px;width:auto;flex:none}
+  header .htxt{min-width:0}
+  header h1{margin:0;font-size:19px;color:var(--verde2)}
+  header p{margin:4px 0 0;color:#4b5563;font-size:13px}
+  .wrap{max-width:920px;margin:24px auto;padding:0 18px}
+  .card{background:#fff;border:1px solid var(--borda);border-radius:10px;padding:20px;margin-bottom:18px}
+  label{font-weight:600;font-size:13px;display:block;margin-bottom:6px}
+  input[type=text]{width:100%;padding:9px 11px;border:1px solid var(--borda);border-radius:7px;font-size:14px}
+  .row{display:flex;gap:16px;flex-wrap:wrap}
+  .row>div{flex:1;min-width:220px}
+  #drop{border:2px dashed var(--verde);border-radius:10px;padding:34px;text-align:center;color:#4b5563;
+        background:#f6fbf6;cursor:pointer;transition:.15s}
+  #drop.hover{background:#e8f5e9}
+  #drop b{color:var(--verde2)}
+  .btn{background:var(--verde);color:#fff;border:0;border-radius:8px;padding:12px 22px;font-size:15px;
+       font-weight:600;cursor:pointer}
+  .btn:disabled{background:#9ca3af;cursor:not-allowed}
+  .btn.sec{background:#fff;color:var(--verde2);border:1px solid var(--verde)}
+  table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
+  th,td{border:1px solid var(--borda);padding:7px 9px;text-align:left}
+  th{background:var(--cinza)}
+  td.c{text-align:center}
+  .tag{display:inline-block;background:#e8f5e9;color:var(--verde2);border-radius:20px;padding:2px 10px;font-size:12px;font-weight:600}
+  .muted{color:#6b7280;font-size:12px}
+  #log{font-size:12px;color:#b91c1c;white-space:pre-wrap;margin-top:8px}
+  .ok{color:var(--verde2)!important}
+  .foot{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:16px}
+</style>
+</head>
+<body>
+<header>
+  <img class="logo" src="data:image/jpeg;base64,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" alt="LR Consultoria Agropecuária">
+  <div class="htxt">
+    <h1>Gerador de Planilha de Coordenadas — Área Beneficiada</h1>
+    <p>Arraste os PDFs do BB Pl@ntar (ou KMLs) e baixe a planilha pronta. Tudo roda no seu navegador — nada é enviado para a internet.</p>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="card">
+    <div class="row">
+      <div>
+        <label>Nome do imóvel / fazenda <span class="muted">(você digita)</span></label>
+        <input type="text" id="fazenda" placeholder="Ex.: PIQUETES 46,45,47,44 196 HA">
+      </div>
+      <div>
+        <label>Croqui (imagem, opcional)</label>
+        <input type="file" id="croqui" accept="image/*">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <label>Documentos das glebas (PDF do BB Pl@ntar ou KML)</label>
+    <div id="drop">📂 <b>Clique aqui</b> ou arraste os arquivos<br>
+      <span class="muted">Pode soltar vários de uma vez. O PDF é a fonte preferida (tem nome + área + coordenadas).</span>
+    </div>
+    <input type="file" id="files" accept=".pdf,.kml" multiple style="display:none">
+    <div id="lista"></div>
+    <div id="log"></div>
+    <div class="foot">
+      <button class="btn" id="gerar" disabled>⬇️ Gerar Excel</button>
+      <button class="btn sec" id="limpar">Limpar</button>
+      <span class="muted" id="resumo"></span>
+    </div>
+  </div>
+
+  <p class="muted">Regras: nome e área vêm de dentro do PDF (campo “Descrição da Gleba” / “Área Capturada”).
+  As glebas são ordenadas por área crescente e numeradas (Gleba 1, 2, 3…). O polígono é reduzido para
+  os 4–10 pontos mais representativos (mantendo o contorno fiel à divisa).</p>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+let glebas = [];   // {nome, area, areaNum, coords:[[lat,lon]...], pontos, origem, arquivo}
+
+/* ---------- LEITURA PDF ---------- */
+async function lerPDF(file){
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+  let linhas = [], textoTudo = "";
+  for(let p=1;p<=pdf.numPages;p++){
+    const page = await pdf.getPage(p);
+    const tc = await page.getTextContent();
+    let linha = "";
+    for(const it of tc.items){
+      linha += it.str + " ";
+      textoTudo += it.str + " ";
+      if(it.hasEOL){ linhas.push(linha.trim()); linha=""; }
+    }
+    if(linha.trim()) linhas.push(linha.trim());
+  }
+  let desc=null, area=null, benef=null;
+  // No pdf.js os rótulos e valores vêm intercalados: "Área Capturada (ha)" -> valor -> próximo rótulo.
+  // ÁREA = número logo após "Capturada (ha)" (preciso, ex.: 29,06).
+  const ma = textoTudo.match(/Capturada\s*\(\s*ha\s*\)\s+(\d+,\d+)/)          // ordem do pdf.js
+          || textoTudo.match(/(\d+,\d+)\s+(\d+,\d+)\s+(\d+,\d+)\s+Arquivo/);  // ordem alternativa
+  if(ma) area = ma[1];
+  // DESCRIÇÃO/NOME = valor entre "Gleba" e "...rea Capturada".
+  const md = textoTudo.match(/Gleba\s+([\s\S]+?)\s+\S*rea\s+Capturada/);
+  if(md) desc = md[1].trim();
+  // beneficiário: pdf.js põe o valor entre "Nome" e "Beneficiário"; fallback estilo "Beneficiário ... CPF".
+  const mb = textoTudo.match(/Nome\s+([\s\S]+?)\s+Benefici/)
+          || textoTudo.match(/Benefici\S*\s+([\s\S]+?)\s+CPF/);
+  if(mb) benef = mb[1].trim();
+  if(!desc) desc = benef;
+  const coords = extrairCoords(textoTudo);
+  return {desc, area, coords, benef};
+}
+
+function nomeImovel(b){
+  if(!b) return "";
+  let s=b.replace(/^renov[ao]r?gro[_\s]*/i,"");
+  s=s.replace(/[_\s]*junh\w*\b/i,"");
+  s=s.replace(/_/g," ").replace(/\bFaz\b/i,"Fazenda");
+  return s.replace(/\s+/g," ").trim().toUpperCase();
+}
+
+function extrairCoords(texto){
+  const re = /(\d+)\s+(-?\d+\.\d{3,})\s+(-?\d+\.\d{3,})/g;
+  let m, arr=[];
+  while((m=re.exec(texto))!==null){
+    arr.push([parseInt(m[1]), parseFloat(m[2]), parseFloat(m[3])]);
+  }
+  arr.sort((a,b)=>a[0]-b[0]);
+  return arr.map(x=>[x[1],x[2]]);
+}
+
+/* ---------- LEITURA KML ---------- */
+async function lerKML(file){
+  const txt = await file.text();
+  const doc = new DOMParser().parseFromString(txt,"text/xml");
+  const node = doc.getElementsByTagName("coordinates")[0];
+  let coords=[];
+  if(node){
+    for(const tok of node.textContent.trim().split(/\s+/)){
+      const p = tok.split(",");
+      if(p.length>=2) coords.push([parseFloat(p[1]), parseFloat(p[0])]);
+    }
+  }
+  const base = file.name.replace(/\.[^.]+$/,"");
+  const ma = base.match(/(\d+[.,]\d+)\s*ha/i);
+  const area = ma ? ma[1].replace(".",",") : "";
+  const desc = base.replace(/[_\s]*\d+[.,]\d+\s*ha.*$/i,"");
+  return {desc, area, coords};
+}
+
+/* ---------- SIMPLIFICAÇÃO (Visvalingam + Hausdorff) ---------- */
+function triArea(a,b,c){return Math.abs((b[0]-a[0])*(c[1]-a[1])-(c[0]-a[0])*(b[1]-a[1]))/2;}
+function proj(ring){
+  const lat0 = ring.reduce((s,p)=>s+p[0],0)/ring.length;
+  const k = Math.cos(lat0*Math.PI/180);
+  return ring.map(([la,lo])=>[lo*k*111320, la*111320]);
+}
+function segDist(p,a,b){
+  const dx=b[0]-a[0], dy=b[1]-a[1];
+  if(dx===0&&dy===0) return Math.hypot(p[0]-a[0],p[1]-a[1]);
+  let t=((p[0]-a[0])*dx+(p[1]-a[1])*dy)/(dx*dx+dy*dy);
+  t=Math.max(0,Math.min(1,t));
+  return Math.hypot(p[0]-(a[0]+t*dx), p[1]-(a[1]+t*dy));
+}
+function hausdorff(full,simp){
+  const P=proj(full.concat([full[0]])), S=proj(simp.concat([simp[0]]));
+  let md=0;
+  for(const p of P){
+    let d=Infinity;
+    for(let i=0;i<S.length-1;i++) d=Math.min(d,segDist(p,S[i],S[i+1]));
+    md=Math.max(md,d);
+  }
+  return md;
+}
+function diag(full){
+  const P=proj(full); const xs=P.map(p=>p[0]), ys=P.map(p=>p[1]);
+  return Math.hypot(Math.max(...xs)-Math.min(...xs), Math.max(...ys)-Math.min(...ys))||1e-9;
+}
+function visToK(ring,k){
+  ring=ring.slice();
+  while(ring.length>k){
+    const m=ring.length; let best=0,ba=Infinity;
+    for(let i=0;i<m;i++){
+      const a=triArea(ring[(i-1+m)%m],ring[i],ring[(i+1)%m]);
+      if(a<ba){ba=a;best=i;}
+    }
+    ring.splice(best,1);
+  }
+  return ring;
+}
+function simplify(coords,min=4,max=10,tol=0.025){
+  let ring = (coords.length>1 && coords[0][0]===coords[coords.length-1][0]
+              && coords[0][1]===coords[coords.length-1][1]) ? coords.slice(0,-1) : coords.slice();
+  if(ring.length<=min) return ring;
+  const dg=diag(ring);
+  for(let k=min;k<=max;k++){
+    const s=visToK(ring,k);
+    if(hausdorff(ring,s)/dg<=tol) return s;
+  }
+  return visToK(ring,max);
+}
+
+/* ---------- GMS ---------- */
+function toDMS(dec,isLat){
+  const hemi = isLat ? (dec<0?"S":"N") : (dec<0?"O":"L");
+  let a=Math.abs(dec), d=Math.floor(a), mf=(a-d)*60, mm=Math.floor(mf), ss=Math.round((mf-mm)*60*100)/100;
+  if(ss>=60){ss-=60;mm++;} if(mm>=60){mm-=60;d++;}
+  const pad=n=>String(n).padStart(2,"0");
+  const ssS=ss.toFixed(2).padStart(5,"0");
+  return `${d}°${pad(mm)}'${ssS}"${hemi}`;
+}
+
+/* ---------- MONTAGEM DA GLEBA ---------- */
+function limpaNome(base){
+  base = base.replace(/_\d+(?:,\d+)?(\s*ha)?$/i,"");   // tira área embutida no fim
+  base = base.replace(/(\d),(\d)/g,"$1, $2");          // "04,05" -> "04, 05"
+  return base.replace(/_/g," ").replace(/\s+/g," ").trim().toUpperCase();
+}
+function areaDoArquivo(nome){
+  // pega os hectares do nome do arquivo: "_103,70 ha" / "92 ha" / "15,73ha"
+  const m = nome.match(/(\d+(?:,\d+)?)\s*ha\b/i);
+  return m ? m[1] : "";
+}
+function montaGleba(r, origem, arquivo){
+  if(!r.coords || r.coords.length<3) return null;
+  const baseNome = r.desc || arquivo.replace(/\.[^.]+$/,"");
+  const nome = limpaNome(baseNome);
+  const simp = simplify(r.coords);
+  const pontos = simp.map((p,i)=>[i+1, toDMS(p[0],true), toDMS(p[1],false)]);
+  const area = r.area || areaDoArquivo(arquivo);   // PDF preciso; senão, do nome do arquivo
+  const areaNum = area ? parseFloat(area.replace(",",".")) : 0;
+  const imovel = nomeImovel(r.benef) || nomeImovel(r.desc);
+  return {nome, area, areaNum, pontos, origem, arquivo, imovel};
+}
+
+/* ---------- GERAÇÃO DO EXCEL ---------- */
+const GRAY="FFE5E7EB", LINE="FFA0A0A0";
+function bordaTodos(){const s={style:"thin",color:{argb:LINE}};return{top:s,left:s,right:s,bottom:s};}
+function escreveBloco(ws, g, top, base){ // base=1 (A) ou 6 (F)
+  const cP=base, cLat=base+1, cLon=base+3, last=base+3;
+  ws.mergeCells(top,cP,top,last);
+  let c=ws.getCell(top,cP); c.value="COORDENADAS GEOGRÁFICAS";
+  c.font={name:"Calibri",size:10,bold:true}; c.alignment={horizontal:"left",vertical:"center",wrapText:true};
+  ws.mergeCells(top+1,cP,top+1,last);
+  c=ws.getCell(top+1,cP);
+  c.value = g.area ? `${g.nome} COM ${g.area} HECTARES - Gleba ${g.n}` : `${g.nome} - Gleba ${g.n}`;
+  c.font={name:"Calibri",size:10,bold:true}; c.alignment={horizontal:"left",vertical:"center",wrapText:true};
+  ws.getRow(top+1).height=28.5;
+  const hdr=top+2;
+  [[cP,"Ponto"],[cLat,"Latitude"],[cLon,"Longitude"]].forEach(([cc,t])=>{
+    const x=ws.getCell(hdr,cc); x.value=t; x.font={name:"Calibri",size:10,bold:true};
+    x.fill={type:"pattern",pattern:"solid",fgColor:{argb:GRAY}}; x.border=bordaTodos();
+    x.alignment={horizontal:"center",vertical:"center"};
+  });
+  g.pontos.forEach((p,j)=>{
+    const r=hdr+1+j;
+    [[cP,p[0]],[cLat,p[1]],[cLon,p[2]]].forEach(([cc,v])=>{
+      const x=ws.getCell(r,cc); x.value=v; x.font={name:"Calibri",size:10};
+      x.border=bordaTodos(); x.alignment={horizontal:"center",vertical:"center"};
+    });
+  });
+  return hdr+1+g.pontos.length;
+}
+
+async function gerarExcel(){
+  const fazenda = (document.getElementById("fazenda").value||"").trim().toUpperCase();
+  const ordenadas = glebas.slice().sort((a,b)=>a.areaNum-b.areaNum);
+  ordenadas.forEach((g,i)=>g.n=i+1);
+
+  const wb=new ExcelJS.Workbook();
+  const ws=wb.addWorksheet("Planilha1",{views:[{showGridLines:false}]});
+  const widths={1:7.375,2:17.375,3:2.375,4:17.375,5:4.375,6:7.375,7:17.375,8:2.375,9:17.375};
+  Object.entries(widths).forEach(([k,v])=>ws.getColumn(+k).width=v);
+
+  ws.getCell("A1").value=" Anexo 1 - Croqui e Coordenadas da área beneficiada ";
+  ws.getCell("A1").font={name:"Arial",size:14};
+
+  // croqui opcional
+  const cFile=document.getElementById("croqui").files[0];
+  let start=49;
+  if(cFile){
+    const b64=await fileToB64(cFile);
+    const ext=(cFile.name.split(".").pop()||"png").toLowerCase();
+    const imgId=wb.addImage({base64:b64, extension:(ext==="jpg"?"jpeg":ext)});
+    ws.addImage(imgId,{tl:{col:0,row:1}, ext:{width:620,height:330}});
+  }
+  ws.getCell(`A${start}`).value="ÁREA BENEFICIADA";
+  ws.getCell(`A${start}`).font={name:"Calibri",size:11,bold:true};
+  ws.getCell(`A${start+1}`).value=fazenda;
+  ws.getCell(`A${start+1}`).font={name:"Calibri",size:11,bold:true};
+
+  let row=start+3;
+  const blocos=[];
+  for(let i=0;i<ordenadas.length;i+=2){
+    const left=ordenadas[i], right=ordenadas[i+1];
+    const el=escreveBloco(ws,left,row,1);
+    const er=right?escreveBloco(ws,right,row,6):el;
+    const fim=Math.max(el,er);
+    blocos.push([row, fim-1]);
+    row=fim+3;
+  }
+  configPagina(ws, start, blocos, row-1, !!cFile);
+  const buf=await wb.xlsx.writeBuffer();
+  const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=`area_beneficiada_${(fazenda||"glebas").toLowerCase().replace(/\s+/g,"_")}.xlsx`;
+  a.click();
+}
+function fileToB64(file){
+  return new Promise(res=>{const r=new FileReader();r.onload=()=>res(r.result.split(",")[1]);r.readAsDataURL(file);});
+}
+
+/* A4 retrato + quebras de página que nunca cortam um bloco no meio */
+const LINHAS_POR_PAGINA = 46;   // ajuste fino do quanto cabe por página A4
+function configPagina(ws, start, blocos, ultima, temCroqui){
+  ws.pageSetup.paperSize   = 9;            // A4
+  ws.pageSetup.orientation = "portrait";
+  ws.pageSetup.fitToPage   = true;
+  ws.pageSetup.fitToWidth  = 1;            // colunas em 1 página de largura
+  ws.pageSetup.fitToHeight = 0;            // altura livre (respeita as quebras)
+  ws.pageSetup.margins = {left:0.4,right:0.4,top:0.5,bottom:0.5,header:0.2,footer:0.2};
+  ws.pageSetup.printArea = `A1:I${ultima}`;
+  if(temCroqui) ws.getRow(start-1).addPageBreak();   // croqui sozinho na 1ª página
+  let paginaInicio = start;
+  for(const [ini,fim] of blocos){
+    if(fim - paginaInicio + 1 > LINHAS_POR_PAGINA && ini > paginaInicio){
+      ws.getRow(ini-1).addPageBreak();     // quebra antes do bloco (nunca no meio)
+      paginaInicio = ini;
+    }
+  }
+}
+
+/* ---------- UI ---------- */
+const drop=document.getElementById("drop"), inp=document.getElementById("files"),
+      lista=document.getElementById("lista"), log=document.getElementById("log");
+drop.onclick=()=>inp.click();
+drop.ondragover=e=>{e.preventDefault();drop.classList.add("hover");};
+drop.ondragleave=()=>drop.classList.remove("hover");
+drop.ondrop=e=>{e.preventDefault();drop.classList.remove("hover");addFiles(e.dataTransfer.files);};
+inp.onchange=()=>addFiles(inp.files);
+document.getElementById("limpar").onclick=()=>{ glebas=[]; render(); log.textContent=""; };
+document.getElementById("gerar").onclick=async()=>{
+  try{ await gerarExcel(); log.textContent="✔ Planilha gerada e baixada."; log.className="ok"; }
+  catch(err){ log.className=""; log.textContent="Erro ao gerar: "+err.message; console.error(err); }
+};
+
+async function addFiles(fileList){
+  log.className=""; log.textContent="";
+  for(const file of fileList){
+    try{
+      const ext=file.name.toLowerCase().split(".").pop();
+      let r, origem;
+      if(ext==="pdf"){ r=await lerPDF(file); origem="PDF"; }
+      else if(ext==="kml"){ r=await lerKML(file); origem="KML"; }
+      else { continue; }
+      const g=montaGleba(r,origem,file.name);
+      if(!g){ log.textContent+=`⚠ ${file.name}: não encontrei coordenadas.\n`; continue; }
+      glebas.push(g);   // render() faz a deduplicação (prefere PDF sobre KML)
+    }catch(err){ log.textContent+=`⚠ ${file.name}: ${err.message}\n`; }
+  }
+  render();
+}
+
+function render(){
+  // dedup preferindo PDF sobre KML para mesma gleba
+  const byKey={};
+  for(const g of glebas){
+    const k=g.areaNum+"|"+g.nome;
+    if(!byKey[k] || (byKey[k].origem!=="PDF" && g.origem==="PDF")) byKey[k]=g;
+  }
+  glebas=Object.values(byKey).sort((a,b)=>a.areaNum-b.areaNum);
+  if(!glebas.length){ lista.innerHTML=""; document.getElementById("gerar").disabled=true;
+    document.getElementById("resumo").textContent=""; return; }
+  let h=`<table><thead><tr><th>#</th><th>Gleba</th><th>Área (ha)</th><th>Pontos</th><th>Origem</th></tr></thead><tbody>`;
+  glebas.forEach((g,i)=>{
+    h+=`<tr><td class="c">${i+1}</td><td>${g.nome}</td><td class="c">${g.area||"—"}</td>
+        <td class="c"><span class="tag">${g.pontos.length}</span></td><td class="c">${g.origem}</td></tr>`;
+  });
+  h+="</tbody></table>";
+  lista.innerHTML=h;
+  document.getElementById("gerar").disabled=false;
+  document.getElementById("resumo").textContent=`${glebas.length} gleba(s) carregada(s).`;
+}
+</script>
+</body>
+</html>
