@@ -1,0 +1,171 @@
+===============================================================================
+  ROTEIRO - INSTALAR O PYTHON E AS BIBLIOTECAS EM UM COMPUTADOR NOVO (WINDOWS)
+===============================================================================
+
+Tempo estimado: 15 a 30 minutos. Precisa de internet.
+Siga as etapas na ordem. Marque com [X] o que já foi feito.
+
+
+-------------------------------------------------------------------------------
+ETAPA 1 - VERIFICAR SE O PYTHON JÁ EXISTE                                 [ ]
+-------------------------------------------------------------------------------
+1. Aperte a tecla Windows, digite  cmd  e aperte Enter (abre o "Prompt de
+   Comando", a tela preta).
+2. Digite e aperte Enter:
+
+       python --version
+
+   - Se aparecer algo como "Python 3.12.x" -> o Python já está instalado,
+     pule para a ETAPA 3.
+   - Se aparecer "não é reconhecido como comando" ou abrir a Microsoft Store
+     -> feche a Store e siga para a ETAPA 2.
+
+
+-------------------------------------------------------------------------------
+ETAPA 2 - BAIXAR E INSTALAR O PYTHON                                      [ ]
+-------------------------------------------------------------------------------
+1. Abra o navegador e acesse:
+
+       https://www.python.org/downloads/
+
+2. Clique no botão amarelo "Download Python 3.x.x" (a versão mais recente).
+3. Abra o arquivo baixado (python-3.x.x-amd64.exe).
+4. >>> MUITO IMPORTANTE <<<  Na PRIMEIRA tela do instalador, marque a caixa:
+
+       [X] Add python.exe to PATH
+
+   (fica embaixo, no rodapé da janela). Se esquecer isso, nada funciona
+   pelo Prompt de Comando.
+5. Clique em "Install Now" e aguarde.
+6. Se aparecer a opção "Disable path length limit", clique nela (autorize
+   se o Windows pedir).
+7. Clique em "Close".
+8. FECHE o Prompt de Comando que estava aberto e abra um NOVO (tecla
+   Windows -> cmd -> Enter). O Prompt antigo não enxerga a instalação nova.
+9. Confira:
+
+       python --version
+       pip --version
+
+   Os dois devem mostrar um número de versão.
+
+
+-------------------------------------------------------------------------------
+ETAPA 3 - ATUALIZAR O PIP (instalador de bibliotecas)                     [ ]
+-------------------------------------------------------------------------------
+No Prompt de Comando:
+
+       python -m pip install --upgrade pip
+
+
+-------------------------------------------------------------------------------
+ETAPA 4 - INSTALAR AS BIBLIOTECAS                                         [ ]
+-------------------------------------------------------------------------------
+Copie a linha abaixo INTEIRA, cole no Prompt de Comando (botão direito do
+mouse cola) e aperte Enter:
+
+       python -m pip install pandas openpyxl pdfplumber pymupdf simplekml shapely pyproj geopandas pytesseract pillow
+
+Para que serve cada uma:
+   pandas       -> tabelas e planilhas (ler/organizar dados)
+   openpyxl     -> criar e editar arquivos Excel (.xlsx)
+   pdfplumber   -> extrair texto e tabelas de PDF
+   pymupdf      -> ler PDF e transformar páginas em imagem (import fitz)
+   simplekml    -> gerar arquivos KML para o Google Earth
+   shapely      -> cálculos com polígonos (área, perímetro, sobreposição)
+   pyproj       -> converter coordenadas (UTM <-> graus, SIRGAS 2000)
+   geopandas    -> abrir shapefile (.shp do CAR/SICAR) e GeoPackage, cruzar
+                   camadas (gleba x imóvel, APP, Reserva Legal), calcular
+                   área de vários polígonos e converter shapefile <-> KML
+   pytesseract  -> OCR: ler texto de PDF escaneado (precisa da ETAPA 5)
+   pillow       -> manipular imagens
+
+Espere terminar. No final deve aparecer "Successfully installed ...".
+
+
+-------------------------------------------------------------------------------
+ETAPA 5 - (OPCIONAL) OCR PARA PDF ESCANEADO - TESSERACT                   [ ]
+-------------------------------------------------------------------------------
+Só é necessário se for ler PDF escaneado (imagem, não texto).
+
+1. Acesse:
+
+       https://github.com/UB-Mannheim/tesseract/wiki
+
+2. Baixe o instalador "tesseract-ocr-w64-setup-....exe" e execute.
+3. Durante a instalação, em "Additional language data", marque
+   "Portuguese" (idioma português).
+4. Deixe a pasta padrão:  C:\Program Files\Tesseract-OCR
+5. Adicione essa pasta ao PATH:
+   - Tecla Windows -> digite "variáveis de ambiente" -> "Editar as
+     variáveis de ambiente do sistema" -> botão "Variáveis de Ambiente".
+   - Em "Variáveis do sistema", selecione "Path" -> "Editar" -> "Novo" ->
+     cole:  C:\Program Files\Tesseract-OCR   -> OK, OK, OK.
+6. Feche e abra um NOVO Prompt de Comando e confira:
+
+       tesseract --version
+
+
+-------------------------------------------------------------------------------
+ETAPA 6 - TESTAR SE ESTÁ TUDO FUNCIONANDO                                 [ ]
+-------------------------------------------------------------------------------
+No Prompt de Comando, cole e aperte Enter:
+
+       python -c "import pandas, openpyxl, pdfplumber, fitz, simplekml, shapely, pyproj, geopandas, pytesseract, PIL; print('TUDO OK')"
+
+   - Apareceu "TUDO OK"  -> instalação concluída.
+   - Apareceu "ModuleNotFoundError: No module named 'xxx'" -> instale a que
+     faltou:   python -m pip install xxx
+
+
+-------------------------------------------------------------------------------
+ETAPA 7 - COMO RODAR UM SCRIPT (.py)                                      [ ]
+-------------------------------------------------------------------------------
+1. Salve o script em uma pasta, por exemplo:  C:\Scripts\meu_script.py
+2. No Prompt de Comando:
+
+       cd C:\Scripts
+       python meu_script.py
+
+Dica: na pasta do script, clique na barra de endereço do Explorador de
+Arquivos, digite  cmd  e aperte Enter - o Prompt já abre naquela pasta.
+
+
+-------------------------------------------------------------------------------
+(OPCIONAL) EDITOR PARA ESCREVER/EDITAR SCRIPTS
+-------------------------------------------------------------------------------
+Visual Studio Code:  https://code.visualstudio.com/
+Depois de instalar, abra-o, vá em Extensões (Ctrl+Shift+X) e instale a
+extensão "Python" (da Microsoft).
+
+
+-------------------------------------------------------------------------------
+PROBLEMAS COMUNS
+-------------------------------------------------------------------------------
+* "python não é reconhecido como comando"
+  -> Faltou marcar "Add python.exe to PATH". Rode o instalador de novo,
+     escolha "Modify" -> Next -> marque "Add Python to environment
+     variables" -> Install. Depois abra um NOVO Prompt.
+  -> Alternativa: use  py  no lugar de  python  (ex.: py -m pip install ...)
+
+* Digitar "python" abre a Microsoft Store
+  -> Tecla Windows -> "Gerenciar aliases de execução de aplicativo" ->
+     DESLIGUE "python.exe" e "python3.exe" (Instalador de aplicativo).
+
+* Erro de permissão ao instalar bibliotecas
+  -> Acrescente --user no final:
+       python -m pip install --user pandas ...
+
+* Erro de SSL/certificado ou "Could not fetch URL" (rede de empresa/banco)
+       python -m pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org pandas ...
+
+* pytesseract dá "TesseractNotFoundError"
+  -> A ETAPA 5 não foi feita ou o PATH não foi ajustado. Alternativa: no
+     início do script, informe o caminho:
+       import pytesseract
+       pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
+* Atualizar todas as bibliotecas no futuro
+       python -m pip install --upgrade pandas openpyxl pdfplumber pymupdf simplekml shapely pyproj geopandas pytesseract pillow
+
+===============================================================================
