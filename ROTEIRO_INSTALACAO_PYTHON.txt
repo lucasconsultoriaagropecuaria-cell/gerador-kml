@@ -64,7 +64,7 @@ ETAPA 4 - INSTALAR AS BIBLIOTECAS                                         [ ]
 Copie a linha abaixo INTEIRA, cole no Prompt de Comando (botão direito do
 mouse cola) e aperte Enter:
 
-       python -m pip install pandas openpyxl pdfplumber pymupdf simplekml shapely pyproj pytesseract pillow
+       python -m pip install pandas openpyxl pdfplumber pymupdf simplekml shapely pyproj geopandas pytesseract pillow
 
 Para que serve cada uma:
    pandas       -> tabelas e planilhas (ler/organizar dados)
@@ -74,6 +74,9 @@ Para que serve cada uma:
    simplekml    -> gerar arquivos KML para o Google Earth
    shapely      -> cálculos com polígonos (área, perímetro, sobreposição)
    pyproj       -> converter coordenadas (UTM <-> graus, SIRGAS 2000)
+   geopandas    -> abrir shapefile (.shp do CAR/SICAR) e GeoPackage, cruzar
+                   camadas (gleba x imóvel, APP, Reserva Legal), calcular
+                   área de vários polígonos e converter shapefile <-> KML
    pytesseract  -> OCR: ler texto de PDF escaneado (precisa da ETAPA 5)
    pillow       -> manipular imagens
 
@@ -108,7 +111,7 @@ ETAPA 6 - TESTAR SE ESTÁ TUDO FUNCIONANDO                                 [ ]
 -------------------------------------------------------------------------------
 No Prompt de Comando, cole e aperte Enter:
 
-       python -c "import pandas, openpyxl, pdfplumber, fitz, simplekml, shapely, pyproj, pytesseract, PIL; print('TUDO OK')"
+       python -c "import pandas, openpyxl, pdfplumber, fitz, simplekml, shapely, pyproj, geopandas, pytesseract, PIL; print('TUDO OK')"
 
    - Apareceu "TUDO OK"  -> instalação concluída.
    - Apareceu "ModuleNotFoundError: No module named 'xxx'" -> instale a que
@@ -163,6 +166,6 @@ PROBLEMAS COMUNS
        pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 * Atualizar todas as bibliotecas no futuro
-       python -m pip install --upgrade pandas openpyxl pdfplumber pymupdf simplekml shapely pyproj pytesseract pillow
+       python -m pip install --upgrade pandas openpyxl pdfplumber pymupdf simplekml shapely pyproj geopandas pytesseract pillow
 
 ===============================================================================
