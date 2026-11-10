@@ -67,6 +67,7 @@ import sys
 import unicodedata
 import urllib.request
 import zipfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from xml.dom import minidom
 from typing import Optional
@@ -75,6 +76,7 @@ import anthropic
 from pydantic import BaseModel, Field
 
 MODELO_PADRAO = "claude-opus-5-5"
+SIMULTANEOS = 8  # prints lidos ao mesmo tempo
 EXTENSOES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 PONTOS_POR_PAGINA = 7
 LINHAS_POR_PONTO = 4
@@ -887,31 +889,50 @@ def main():
     if not fotos:
         sys.exit("Nenhum print encontrado (use --fotos).")
 
-    client = None
-    coletas = []
-    print(f"Lendo {len(fotos)} print(s)...")
-    for f in fotos:
-        chave = f.name
-        if chave in cache and not args.sem_dres and cache[chave].get("dres") is None:
-            del cache[chave]  # lido antes sem DRES: lê de novo com a avaliação
-        if chave not in cache:
-            client = client or anthropic.Anthropic()
-            try:
-                cache[chave] = ler_print(client, f, args.modelo, not args.sem_dres)
-            except anthropic.AuthenticationError:
-                sys.exit("Chave da API inválida ou ausente. Rode: set ANTHROPIC_API_KEY=sk-ant-...")
-            except (anthropic.APIError, RuntimeError) as e:
-                print(f"  ! {f.name}: erro na leitura ({e})")
-                continue
-            cache_arq.write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")
-        c = cache[chave]
-        print(f"  {f.name}: {c.get('codigo')}  {c.get('data')} {c.get('hora')}  "
+    def mostrar(nome: str, c: dict):
+        print(f"  {nome}: {c.get('codigo')}  {c.get('data')} {c.get('hora')}  "
               f"talhão {c.get('talhao')}  ({c.get('latitude')}, {c.get('longitude')})")
         d = c.get("dres") or {}
         if d.get("avaliavel"):
             cams = "  ".join(f"{cam['espessura_cm']:g} cm Q{cam['nota_q']}" for cam in d.get("camadas", []))
             print(f"      DRES: {cams}  | {d.get('observacao_campo')} (confiança {d.get('confianca')})")
-        coletas.append((f.name, c))
+
+    for f in fotos:
+        if f.name in cache and not args.sem_dres and cache[f.name].get("dres") is None:
+            del cache[f.name]  # lido antes sem DRES: lê de novo com a avaliação
+    faltam = [f for f in fotos if f.name not in cache]
+    ja_lidos = len(fotos) - len(faltam)
+    print(f"Lendo {len(faltam)} print(s), {SIMULTANEOS} ao mesmo tempo"
+          + (f" ({ja_lidos} já lido(s) antes)" if ja_lidos else "") + "...")
+
+    if faltam:
+        # várias leituras ao mesmo tempo; o SDK espera e tenta de novo se a API pedir (429)
+        client = anthropic.Anthropic(max_retries=5)
+        feitos = 0
+        with ThreadPoolExecutor(max_workers=SIMULTANEOS) as pool:
+            tarefas = {pool.submit(ler_print, client, f, args.modelo, not args.sem_dres): f for f in faltam}
+            for tarefa in as_completed(tarefas):
+                f = tarefas[tarefa]
+                feitos += 1
+                try:
+                    cache[f.name] = tarefa.result()
+                except anthropic.AuthenticationError:
+                    for t in tarefas:
+                        t.cancel()
+                    sys.exit("Chave da API inválida ou ausente. Rode: set ANTHROPIC_API_KEY=sk-ant-...")
+                except (anthropic.APIError, RuntimeError) as e:
+                    print(f"  ! [{feitos}/{len(faltam)}] {f.name}: erro na leitura ({e})")
+                    continue
+                cache_arq.write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")
+                print(f"  [{feitos}/{len(faltam)}]", end="")
+                mostrar(f.name, cache[f.name])
+
+    coletas = []
+    for f in fotos:
+        if f.name in cache:
+            if f not in faltam:
+                mostrar(f.name, cache[f.name])
+            coletas.append((f.name, cache[f.name]))
 
     # ordena por data e hora para numerar os pontos na ordem do dia
     def ordem(item):
