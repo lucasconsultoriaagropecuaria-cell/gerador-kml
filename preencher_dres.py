@@ -107,7 +107,7 @@ class Camada(BaseModel):
 class AvaliacaoDRES(BaseModel):
     avaliavel: bool = Field(description="false se as fotos não permitem avaliar o perfil (bloco não visível, foto borrada etc.)")
     camadas: list[Camada] = Field(description="Camadas de cima para baixo (1 a 4)")
-    observacao_campo: str = Field(description='Observação curta no estilo do relatório de campo, ex.: "Raízes superficiais. Crescimento lateral."')
+    observacao_campo: str = Field(description='Observação de campo bem curta, no estilo telegráfico da planilha: 2 ou 3 expressões de poucas palavras separadas por ponto, no máximo 60 caracteres, sem repetir a nota nem explicar o método (ex. de estilo: "Raízes superficiais. Crescimento lateral.")')
     confianca: str = Field(description='"alta", "media" ou "baixa"')
 
 
@@ -153,18 +153,19 @@ Como o DRES funciona:
 - Classes do IQEA: 5,0-6,0 Muito bom | 4,0-4,9 Bom | 3,0-3,9 Regular | 2,0-2,9 Ruim | 1,0-1,9 Muito ruim.
 
 Como ler o bloco na foto:
-- Bloco que sai inteiro da pá e fica na bandeja como uma peça só, coeso, com faces lisas e trincas planas ou
-  horizontais (aspecto de "tijolo" ou de placas), sem agregados arredondados, sem poros nem raízes visíveis: Qe 1.
-  É o caso mais comum em áreas de cana e grãos com tráfego de máquinas; não suba a nota sem evidência.
-- Qe 2 só quando o bloco já se parte em torrões grandes e angulosos, com alguma porosidade ou raízes nas fissuras.
-- Qe 3 ou mais exige ver agregação de verdade: blocos menores que se desfazem, poros, raízes distribuídas, grumos.
-- A camada de cima costuma ser uma faixa fina (2 a 8 cm) mais solta, com palha, grumos ou raízes. Se ela não
-  aparecer na foto, não a invente: use uma camada só de 25 cm.
-- Não há valor padrão: cada foto tem as suas espessuras e notas. Meça as espessuras pela proporção do bloco
-  (25 cm de altura) e escolha a nota pelo que se vê, não por hábito.
-- Numa foto só da bandeja vista de cima, as camadas são difíceis de separar: avalie o conjunto e informe confiança
+- O perfil mais comum nestas áreas de cana: uma camada superficial fina (em geral 3 a 5 cm, às vezes até 8 cm),
+  mais solta, com palha, grumos e raízes, de Qe 3 ou 4, sobre uma camada adensada de Qe 1 ou 2 até o fundo do
+  bloco. Às vezes há uma camada intermediária. Procure a faixa solta no topo do bloco; só deixe de usá-la se ela
+  realmente não existir.
+- Camada adensada que ainda se parte em torrões ou blocos angulosos, com algumas fissuras, poros ou raízes: Qe 2.
+- Camada maciça, coesa, que sai como peça única, com faces lisas, trincas planas ou fissura horizontal, sem raízes
+  nem poros visíveis: Qe 1.
+- Qe 5 ou 6 só com agregação grumosa clara e raízes abundantes, o que é raro nestas áreas.
+- Não há valor padrão: as espessuras e notas de cada foto saem do que ela mostra. Meça as espessuras pela
+  proporção do bloco (cerca de 25 cm de altura).
+- Numa foto só da bandeja vista de cima, as camadas são difíceis de separar: avalie como puder e informe confiança
   baixa ou média.
-Na dúvida entre duas notas, fique com a menor e informe a confiança."""
+Na dúvida entre duas notas, fique com a que melhor explica o que se vê e informe a confiança."""
 
 INSTRUCOES = (
     "A imagem é de amostragem de solo e pode ser de dois tipos. "
@@ -178,7 +179,8 @@ INSTRUCOES = (
 )
 INSTRUCOES_DRES = (
     " Depois, use a foto (ou as fotos do cartão: trincheira, bloco e bandeja) para fazer a avaliação DRES do ponto: "
-    "camadas de cima para baixo com espessura e nota Qe, e uma observação curta de campo."
+    "camadas de cima para baixo com espessura e nota Qe, e uma observação de campo bem curta (até 60 caracteres, "
+    "estilo telegráfico, ex. de estilo: 'Raízes superficiais. Crescimento lateral.')."
 )
 
 
@@ -189,7 +191,8 @@ def texto_referencia(ref: str) -> str:
     return ("\n\nReferência da equipe que esteve no campo (informação de contexto sobre a área, escrita pelo usuário): "
             f'"""{ref.replace(chr(34) * 3, chr(34))}"""\n'
             "Leve essa referência em conta, mas avalie esta foto pelo que ela mostra. Se a foto contradizer a referência, "
-            "fique com o que a foto mostra e diga isso na observação de campo.")
+            "fique com o que a foto mostra e indique isso na observação de campo em poucas palavras "
+            "(ex.: 'Difere da referência.').")
 
 
 def ler_print(client: anthropic.Anthropic, caminho: Path, modelo: str, avaliar: bool, referencia: str = "") -> dict:
@@ -299,6 +302,8 @@ def completar_pelo_carimbo(dados: dict, nome_arquivo: str) -> dict:
     dados["hora"] = dados.get("hora") or hora_nome
     if not dados.get("codigo") and dados.get("rotulo"):
         dados["codigo"] = dados["rotulo"]
+    if dados.get("dres"):
+        dados["dres"]["observacao_campo"] = encurtar_obs(dados["dres"].get("observacao_campo"))
     return dados
 
 
@@ -350,7 +355,20 @@ def buscar_altitude(lat: float, lon: float) -> Optional[int]:
 
 
 def classe_iqea(iqea: float) -> str:
-    return next(nome for limite, nome in CLASSES_IQEA if round(iqea, 1) >= limite)
+    """Classe pelo valor exato, como no relatório: 1,96 é MUITO RUIM, 2,00 é RUIM."""
+    return next(nome for limite, nome in CLASSES_IQEA if round(iqea, 2) >= limite)
+
+
+def encurtar_obs(t: Optional[str], maximo: int = 80) -> str:
+    """Observação no estilo da planilha: corta no fim da última frase que cabe em 'maximo' caracteres."""
+    s = re.sub(r"\s+", " ", t or "").strip()
+    if len(s) <= maximo:
+        return s
+    corte = s[:maximo]
+    fim = corte.rfind(". ")
+    if fim >= 15:
+        return corte[:fim + 1]
+    return re.sub(r"[,;:]$", "", corte[:corte.rfind(" ")]) + "."
 
 
 def numero(v) -> Optional[float]:
@@ -451,10 +469,54 @@ def vazio(v) -> bool:
     return v is None or v == ""
 
 
+class Estilos:
+    """Estilos da pasta (styles.xml): cria, quando preciso, a variante '2 casas decimais' de um estilo de célula."""
+
+    def __init__(self, doc):
+        self.doc, self.alterado, self.cache = doc, False, {}
+
+    def duas_casas(self, s: str) -> str:
+        if self.doc is None:
+            return s
+        chave = s or "0"
+        if chave in self.cache:
+            return self.cache[chave]
+        xfss = self.doc.getElementsByTagName("cellXfs")
+        if not xfss:
+            return s
+        xfs = xfss[0]
+        lista = _filhos(xfs, "xf")
+        base = lista[int(chave)] if int(chave) < len(lista) else (lista[0] if lista else None)
+        if base is None:
+            return s
+        if base.getAttribute("numFmtId") == "4":
+            self.cache[chave] = chave
+            return chave
+        novo = base.cloneNode(True)
+        novo.setAttribute("numFmtId", "4")  # formato interno do Excel "#,##0.00"
+        novo.setAttribute("applyNumberFormat", "1")
+        xfs.appendChild(novo)
+        idx = str(len(_filhos(xfs, "xf")) - 1)
+        xfs.setAttribute("count", str(int(idx) + 1))
+        self.alterado = True
+        self.cache[chave] = idx
+        return idx
+
+
 class Aba:
-    def __init__(self, nome: str, caminho: str, doc, compartilhadas: list):
+    def __init__(self, nome: str, caminho: str, doc, compartilhadas: list, estilos: Estilos):
         self.nome, self.caminho, self.doc, self.compartilhadas = nome, caminho, doc, compartilhadas
+        self.estilos = estilos
         self.sd = doc.getElementsByTagName("sheetData")[0]
+
+    def duas_casas(self, r: int, c: int):
+        """Mostra a célula com 2 casas decimais (IQEA como no relatório), mantendo borda, fonte e alinhamento."""
+        el = self._celula(r, c, False)
+        if el is None:
+            return
+        s = self.estilos.duas_casas(el.getAttribute("s"))
+        if s and s != "0":
+            el.setAttribute("s", s)
 
     def _linhas(self) -> list:
         return _filhos(self.sd, "row")
@@ -651,6 +713,7 @@ class Pasta:
         self.wb = self.xml("xl/workbook.xml")
         self.rels = self.xml("xl/_rels/workbook.xml.rels")
         self.desenhos = {}
+        self.estilos = Estilos(self.xml("xl/styles.xml"))
 
         compartilhadas = []
         ss = self.xml("xl/sharedStrings.xml")
@@ -662,7 +725,7 @@ class Pasta:
         for sh in self.wb.getElementsByTagName("sheet"):
             rid = sh.getAttributeNS(NS_REL, "id") or sh.getAttribute("r:id")
             caminho_aba = "xl/" + re.sub(r"^/?(xl/)?", "", alvos[rid])
-            self.abas.append(Aba(sh.getAttribute("name"), caminho_aba, self.xml(caminho_aba), compartilhadas))
+            self.abas.append(Aba(sh.getAttribute("name"), caminho_aba, self.xml(caminho_aba), compartilhadas, self.estilos))
 
     def xml(self, caminho: str):
         dados = self.arquivos.get(caminho)
@@ -701,7 +764,7 @@ class Pasta:
         for sv in raiz.getElementsByTagName("sheetView"):
             _remover_attr(sv, "tabSelected")
 
-        aba = Aba(nome, caminho, doc, modelo.compartilhadas)
+        aba = Aba(nome, caminho, doc, modelo.compartilhadas, self.estilos)
         for r in aba.pontos():
             for x in range(r, r + LINHAS_POR_PONTO):
                 for c in range(COL_COD, COL_LEITURA + 1):
@@ -817,6 +880,8 @@ class Pasta:
             self.arquivos[a.caminho] = _serializar(a.doc)
         for caminho, doc in self.desenhos.items():
             self.arquivos[caminho] = _serializar(doc)
+        if self.estilos.alterado and self.estilos.doc is not None:
+            self.arquivos["xl/styles.xml"] = _serializar(self.estilos.doc)
         for calc in self.wb.getElementsByTagName("calcPr"):
             calc.setAttribute("fullCalcOnLoad", "1")  # o Excel recalcula as fórmulas ao abrir
         self.arquivos["xl/workbook.xml"] = _serializar(self.wb)
@@ -882,12 +947,13 @@ def lancar_dres(aba: Aba, linha: int, dres: Optional[dict], sobrescrever: bool) 
     pares = [(numero(aba.ler(r, COL_E)), numero(aba.ler(r, COL_Q))) for r in linhas]
     pares = [(e, q) for e, q in pares if e and q]
     if pares:
-        iqea = round(sum(e * q for e, q in pares) / sum(e for e, _ in pares) + 1e-9, 1)
+        iqea = round(sum(e * q for e, q in pares) / sum(e for e, _ in pares) + 1e-9, 2)  # 2 casas, como no relatório
         if sobrescrever or vazio(aba.ler(linha, COL_IQEA)):
             aba.escrever(linha, COL_IQEA, iqea)
+            aba.duas_casas(linha, COL_IQEA)
         if sobrescrever or vazio(aba.ler(linha, COL_LEITURA)):
             aba.escrever(linha, COL_LEITURA, classe_iqea(iqea))
-        log.append(f"IQEA {f'{iqea:g}'.replace('.', ',')} {classe_iqea(iqea)}")
+        log.append(f"IQEA {f'{iqea:.2f}'.replace('.', ',')} {classe_iqea(iqea)}")
     return log
 
 
@@ -1042,10 +1108,14 @@ def main():
                 try:
                     cache[f.name] = tarefa.result()
                     cache[f.name]["_referencia"] = "" if args.sem_dres else referencia
-                except anthropic.AuthenticationError:
+                except (anthropic.AuthenticationError, TypeError) as e:
+                    # TypeError: o SDK não achou chave nenhuma ("Could not resolve authentication method")
+                    if isinstance(e, TypeError) and "authentication" not in str(e).lower():
+                        raise
                     for t in tarefas:
                         t.cancel()
-                    sys.exit("Chave da API inválida ou ausente. Rode: set ANTHROPIC_API_KEY=sk-ant-...")
+                    sys.exit("Chave da API inválida ou ausente. Rode: setx ANTHROPIC_API_KEY sk-ant-... "
+                             "e abra uma janela nova do Prompt de Comando.")
                 except (anthropic.APIError, RuntimeError) as e:
                     print(f"  ! [{feitos}/{len(faltam)}] {f.name}: erro na leitura ({e})")
                     continue
