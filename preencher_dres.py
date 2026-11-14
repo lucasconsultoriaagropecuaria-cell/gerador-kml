@@ -280,7 +280,8 @@ def data_hora_do_nome(nome: str):
     m = re.search(r"(\d{4})-(\d{2})-(\d{2})", nome)
     if m:
         data = f"{m.group(3)}/{m.group(2)}/{m.group(1)}"
-    m = re.search(r"\bat[ _]+(\d{1,2})[ .:h_-](\d{2})", nome, re.I)
+    # "… at 08 50", "WhatsApp Image … at 17.23.00", "Imagem do WhatsApp de … à(s) 09.22.33"
+    m = re.search(r"(?:^|[\s_])(?:at|às|as|à\(s\))[ _]+(\d{1,2})[ .:h_-](\d{2})", nome, re.I)
     if m:
         hora = f"{int(m.group(1)):02d}:{m.group(2)}"
     m = re.search(r"(20\d{2})(\d{2})(\d{2})[_-](\d{2})(\d{2})\d{2}", nome)
@@ -308,6 +309,30 @@ def padronizar_codigo(c: dict) -> dict:
     if not talhao:
         return c
     return {**c, "talhao": talhao, "codigo": f"{fazenda} T{talhao}" if fazenda else f"T{talhao}"}
+
+
+def unificar_fazendas(lista: list) -> list:
+    """Mesma fazenda escrita de jeitos diferentes ("Sao João 22" e "São João 24"): usa a grafia com mais acentos
+    (a mais comum, se empatar), comparando sem acento e sem maiúsculas. Só mexe em códigos "nome + número"."""
+    partes = lambda cod: re.match(r"^(.+?)\s+(T?\d+[A-Za-z]?)$", (cod or "").strip())
+    chave = lambda f: re.sub(r"\s+", " ", sem_acento(f).lower())
+    grafias = {}
+    for c in lista:
+        m = partes(c.get("codigo"))
+        if m:
+            g = grafias.setdefault((c.get("data") or "", chave(m.group(1))), {})
+            g[m.group(1)] = g.get(m.group(1), 0) + 1
+    acentos = lambda t: sum(1 for ch in t if ch != sem_acento(ch))
+    res = []
+    for c in lista:
+        m = partes(c.get("codigo"))
+        if m:
+            g = grafias[(c.get("data") or "", chave(m.group(1)))]
+            melhor = sorted(g.items(), key=lambda kv: (-acentos(kv[0]), -kv[1]))[0][0]
+            if melhor != m.group(1):
+                c = {**c, "codigo": f"{melhor} {m.group(2)}"}
+        res.append(c)
+    return res
 
 
 def completar_fazendas(lista: list) -> list:
@@ -1240,8 +1265,11 @@ def main():
         return d
     coletas.sort(key=ordem)
 
-    # códigos curtos ("Santa Rosa T13") e fazenda dos que só trazem o talhão ("T30"), pelo dia
-    padronizadas = completar_fazendas([padronizar_codigo(c) for _, c in coletas])
+    # hora/data pelo nome do arquivo também nas leituras guardadas; códigos curtos ("Santa Rosa T13"),
+    # grafia única da fazenda no dia e fazenda dos que só trazem o talhão ("T30")
+    coletas = [(nome, {**c, "hora": c.get("hora") or data_hora_do_nome(nome)[1],
+                       "data": c.get("data") or data_hora_do_nome(nome)[0]}) for nome, c in coletas]
+    padronizadas = completar_fazendas(unificar_fazendas([padronizar_codigo(c) for _, c in coletas]))
     coletas = [(nome, c) for (nome, _), c in zip(coletas, padronizadas)]
 
     pasta = Pasta(entrada)
