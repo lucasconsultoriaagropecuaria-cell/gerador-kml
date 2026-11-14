@@ -5,7 +5,9 @@ PREENCHER PLANILHA DRES A PARTIR DOS PRINTS DO "RELATÓRIO DE COLETAS"
 
 Lê os prints (fotos de tela) dos cartões do Relatório de coletas do portal
 — aqueles com "Coleta 1002-B01", talhão, data e hora, coordenadas etc. —
-e preenche a planilha de campo DRES (aba "LEITURAS DDMM").
+ou as fotos de campo do bloco/bandeja com o carimbo da câmera GPS (data,
+coordenada, altitude e nome do ponto, ex.: "Santa Maria 24"; a hora vem do
+nome do arquivo) e preenche a planilha de campo DRES (aba "LEITURAS DDMM").
 
 O que é preenchido em cada ponto:
     A  PONTO        número do ponto (só se estiver vazio)
@@ -55,6 +57,11 @@ Chave da API da Anthropic (uma vez por janela do Prompt de Comando):
 Uso:
     python preencher_dres.py --planilha DRES_Planilha_de_Campo_AROEIRA.xlsx --fotos C:\\prints
     python preencher_dres.py --planilha DRES.xlsx --fotos print1.png print2.png --altitude
+    python preencher_dres.py --planilha DRES.xlsx --fotos . --referencia "Aroeira: IQEA de campo abaixo de 2"
+
+--referencia: o que a equipe viu no campo. O Claude leva em conta, mas continua
+avaliando cada foto pelo que ela mostra e avisa na observação quando a foto
+contradiz a referência. Mudar a referência faz as fotos serem lidas de novo.
 """
 
 import argparse
@@ -100,17 +107,21 @@ class Camada(BaseModel):
 class AvaliacaoDRES(BaseModel):
     avaliavel: bool = Field(description="false se as fotos não permitem avaliar o perfil (bloco não visível, foto borrada etc.)")
     camadas: list[Camada] = Field(description="Camadas de cima para baixo (1 a 4)")
-    observacao_campo: str = Field(description='Observação curta no estilo do relatório de campo, ex.: "Raízes superficiais. Crescimento lateral."')
+    observacao_campo: str = Field(description='Observação de campo bem curta, no estilo telegráfico da planilha: 2 ou 3 expressões de poucas palavras separadas por ponto, no máximo 60 caracteres, sem repetir a nota nem explicar o método (ex. de estilo: "Raízes superficiais. Crescimento lateral.")')
     confianca: str = Field(description='"alta", "media" ou "baixa"')
 
 
 class Coleta(BaseModel):
-    codigo: Optional[str] = Field(None, description='Código da coleta, ex.: "1002-B01" (do título "Coleta 1002-B01")')
+    tipo_imagem: Optional[str] = Field(None, description='"cartao" = print do cartão do Relatório de coletas; "foto_campo" = foto do bloco/bandeja/trincheira, com ou sem carimbo da câmera')
+    rotulo: Optional[str] = Field(None, description='Foto de campo: a última linha do carimbo da câmera, que identifica o ponto (ex.: "Santa Maria 24"). Cartão: nulo')
+    coordenada_texto: Optional[str] = Field(None, description='Coordenada copiada exatamente como aparece (do cartão ou do carimbo), ex.: \'20°53\'36,679"S 48°44\'22,344"W\' ou "20.48073677S 49.01156803W"')
+    altitude_m: Optional[float] = Field(None, description='Altitude em metros, se aparecer (ex.: "Altitude:552.8msnm" -> 552.8)')
+    codigo: Optional[str] = Field(None, description='Código da coleta, ex.: "1002-B01" (do título "Coleta 1002-B01"). Foto de campo: o mesmo texto de rotulo')
     fazenda: Optional[str] = Field(None, description="Nome da fazenda/estado da linha azul do topo, ex.: MATO GROSSO")
     talhao: Optional[str] = Field(None, description='Valor de "TALHÃO DA COLETA"')
     area_bloco_ha: Optional[float] = Field(None, description='Valor de "ÁREA DO BLOCO" em hectares, como número')
     talhoes_bloco: Optional[str] = Field(None, description='Valor de "TALHÕES DO BLOCO"')
-    data: Optional[str] = Field(None, description='Data de "DATA E HORA" no formato DD/MM/AAAA')
+    data: Optional[str] = Field(None, description='Data no formato DD/MM/AAAA (do cartão ou do carimbo; "5 de novembro de 2026" -> 05/11/2026)')
     hora: Optional[str] = Field(None, description='Hora de "DATA E HORA" no formato HH:MM (24 h)')
     latitude: Optional[float] = Field(None, description='Primeiro número de "COORDENADAS", em graus decimais, com sinal')
     longitude: Optional[float] = Field(None, description='Segundo número de "COORDENADAS", em graus decimais, com sinal')
@@ -138,28 +149,53 @@ Como o DRES funciona:
         raízes raras, tortas, achatadas ou com crescimento lateral (desviando da camada); fissuras horizontais.
     1 - Estrutura maciça ou laminar, muito compactada, sem agregação nem porosidade visível; raízes ausentes ou
         totalmente desviadas.
-- Índice do ponto: IQEA = soma(E x Qe) / soma(E). Ex.: camadas 5 cm Qe 3 e 20 cm Qe 2 -> (15+40)/25 = 2,2.
+- Índice do ponto: IQEA = soma(E x Qe) / soma(E).
 - Classes do IQEA: 5,0-6,0 Muito bom | 4,0-4,9 Bom | 3,0-3,9 Regular | 2,0-2,9 Ruim | 1,0-1,9 Muito ruim.
 
-Sinais típicos nas fotos: camada superficial solta/grumosa de poucos cm sobre camada adensada em blocos; faces lisas e
-fissuras horizontais indicam compactação (Qe 1-2); raízes que correm na horizontal ("crescimento lateral",
-"raízes superficiais") indicam impedimento físico; torrões que se desfazem em grumos com raízes finas indicam Qe 5-6.
-Seja realista e conservador: na dúvida entre duas notas, escolha a que melhor explica o que se vê no bloco e informe
-a confiança. Não invente camadas que não aparecem."""
+Como ler o bloco na foto:
+- O perfil mais comum nestas áreas de cana: uma camada superficial fina (em geral 3 a 5 cm, às vezes até 8 cm),
+  mais solta, com palha, grumos e raízes, de Qe 3 ou 4, sobre uma camada adensada de Qe 1 ou 2 até o fundo do
+  bloco. Às vezes há uma camada intermediária. Procure a faixa solta no topo do bloco; só deixe de usá-la se ela
+  realmente não existir.
+- Camada adensada que ainda se parte em torrões ou blocos angulosos, com algumas fissuras, poros ou raízes: Qe 2.
+- Camada maciça, coesa, que sai como peça única, com faces lisas, trincas planas ou fissura horizontal, sem raízes
+  nem poros visíveis: Qe 1.
+- Qe 5 ou 6 só com agregação grumosa clara e raízes abundantes, o que é raro nestas áreas.
+- Não há valor padrão: as espessuras e notas de cada foto saem do que ela mostra. Meça as espessuras pela
+  proporção do bloco (cerca de 25 cm de altura).
+- Numa foto só da bandeja vista de cima, as camadas são difíceis de separar: avalie como puder e informe confiança
+  baixa ou média.
+Na dúvida entre duas notas, fique com a que melhor explica o que se vê e informe a confiança."""
 
 INSTRUCOES = (
-    "Esta imagem é um print de um cartão do 'Relatório de coletas' de amostragem de solo. "
-    "Transcreva exatamente os campos de texto do cartão (lado esquerdo). Ignore o texto pequeno sobreposto às fotos. "
-    "Copie os números exatamente como aparecem, convertendo a vírgula decimal da área em ponto. "
-    "Se um campo não aparecer ou estiver ilegível, deixe nulo."
+    "A imagem é de amostragem de solo e pode ser de dois tipos. "
+    "(1) Print de um cartão do 'Relatório de coletas' (título 'Coleta 1002-B01', talhão, data e hora, coordenadas): "
+    "transcreva os campos de texto do cartão e ignore o texto pequeno sobreposto às fotos dele. "
+    "(2) Foto de campo do bloco, da bandeja ou da trincheira, em geral com o carimbo de um aplicativo de câmera GPS no "
+    "canto (data, coordenada, altitude, velocidade e, na última linha, o nome do ponto, ex.: 'Santa Maria 24'): "
+    "leia o carimbo; o nome do ponto vai em rotulo e também em codigo; a hora quase nunca aparece no carimbo, deixe nula. "
+    "Copie a coordenada exatamente como está em coordenada_texto e não converta. "
+    "Copie os números exatamente como aparecem. Se um campo não aparecer ou estiver ilegível, deixe nulo."
 )
 INSTRUCOES_DRES = (
-    " Depois, use as fotos do cartão (trincheira, bloco e bandeja) para fazer a avaliação DRES do ponto: "
-    "camadas de cima para baixo com espessura e nota Qe, e uma observação curta de campo."
+    " Depois, use a foto (ou as fotos do cartão: trincheira, bloco e bandeja) para fazer a avaliação DRES do ponto: "
+    "camadas de cima para baixo com espessura e nota Qe, e uma observação de campo bem curta (até 60 caracteres, "
+    "estilo telegráfico, ex. de estilo: 'Raízes superficiais. Crescimento lateral.')."
 )
 
 
-def ler_print(client: anthropic.Anthropic, caminho: Path, modelo: str, avaliar: bool) -> dict:
+def texto_referencia(ref: str) -> str:
+    """Referência da equipe de campo, quando informada: contexto, sem passar por cima da foto."""
+    if not ref:
+        return ""
+    return ("\n\nReferência da equipe que esteve no campo (informação de contexto sobre a área, escrita pelo usuário): "
+            f'"""{ref.replace(chr(34) * 3, chr(34))}"""\n'
+            "Leve essa referência em conta, mas avalie esta foto pelo que ela mostra. Se a foto contradizer a referência, "
+            "fique com o que a foto mostra e indique isso na observação de campo em poucas palavras "
+            "(ex.: 'Difere da referência.').")
+
+
+def ler_print(client: anthropic.Anthropic, caminho: Path, modelo: str, avaliar: bool, referencia: str = "") -> dict:
     tipo = mimetypes.guess_type(caminho.name)[0] or "image/png"
     if tipo == "image/jpg":
         tipo = "image/jpeg"
@@ -175,7 +211,7 @@ def ler_print(client: anthropic.Anthropic, caminho: Path, modelo: str, avaliar: 
             "role": "user",
             "content": [
                 {"type": "image", "source": {"type": "base64", "media_type": tipo, "data": dados}},
-                {"type": "text", "text": INSTRUCOES + (INSTRUCOES_DRES if avaliar else "")},
+                {"type": "text", "text": INSTRUCOES + (INSTRUCOES_DRES + texto_referencia(referencia) if avaliar else "")},
             ],
         }],
         output_format=Coleta,
@@ -185,6 +221,89 @@ def ler_print(client: anthropic.Anthropic, caminho: Path, modelo: str, avaliar: 
     dados = resp.parsed_output.model_dump()
     if not avaliar:
         dados["dres"] = None
+    return completar_pelo_carimbo(dados, caminho.name)
+
+
+# --------------------------------------------------------------------------
+# Carimbo das câmeras GPS e nome do arquivo das fotos de campo
+# --------------------------------------------------------------------------
+MESES = {"janeiro": 1, "fevereiro": 2, "marco": 3, "abril": 4, "maio": 5, "junho": 6, "julho": 7,
+         "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12}
+
+
+def ler_coordenada(texto: Optional[str]):
+    """'20°53'36,679"S 48°44'22,344"W' ou '20.48073677S 49.01156803W' -> (lat, lon) em graus decimais."""
+    if not texto:
+        return None
+    t = re.sub(r"[′’']", "'", texto)
+    t = re.sub(r'[″”"]', '"', t).replace("º", "°")
+    num = lambda x: float(x.replace(",", "."))
+    valores = [(int(m[0]) + int(m[1]) / 60 + num(m[2]) / 3600, m[3].upper()) for m in
+               re.findall(r"(\d{1,3})\s*°\s*(\d{1,2})\s*'\s*(\d{1,2}(?:[.,]\d+)?)\s*\"?\s*([NSLOEW])", t, re.I)]
+    if len(valores) < 2:
+        valores = [(num(m[0]), m[1].upper()) for m in
+                   re.findall(r"(-?\d{1,3}[.,]\d{3,})\s*°?\s*([NSLOEW])?(?![a-z])", t, re.I)]
+    if len(valores) < 2:
+        return None
+    (a, ha), (b, hb) = valores[0], valores[1]
+    if ha in "LOEW" and ha and hb in "NS" and hb:
+        (a, ha), (b, hb) = (b, hb), (a, ha)
+    sinal = lambda v, h: -abs(v) if h in ("S", "W", "O") else v
+    lat, lon = sinal(a, ha), sinal(b, hb)
+    if abs(lat) > 90 or abs(lon) > 180:
+        return None
+    return round(lat, 7), round(lon, 7)
+
+
+def normalizar_data(texto: Optional[str]) -> Optional[str]:
+    """'06/11/2026', '5 de novembro de 2026', '2026-11-05' -> 'DD/MM/AAAA'."""
+    if not texto:
+        return None
+    t = sem_acento(texto.lower())
+    m = re.search(r"(\d{1,2})/(\d{1,2})/(\d{2,4})", t)
+    if m:
+        ano = m.group(3) if len(m.group(3)) == 4 else "20" + m.group(3)
+        return f"{int(m.group(1)):02d}/{int(m.group(2)):02d}/{ano}"
+    m = re.search(r"(\d{1,2})\s+de\s+([a-z]+)\s+de\s+(\d{4})", t)
+    if m and m.group(2) in MESES:
+        return f"{int(m.group(1)):02d}/{MESES[m.group(2)]:02d}/{m.group(3)}"
+    m = re.search(r"(\d{4})-(\d{2})-(\d{2})", t)
+    if m:
+        return f"{m.group(3)}/{m.group(2)}/{m.group(1)}"
+    return None
+
+
+def data_hora_do_nome(nome: str):
+    """'2026-11-05 at 08 50.jpeg', 'WhatsApp Image 2026-11-09 at 17.23.00.jpeg', 'IMG_20261105_085012.jpg'."""
+    data = hora = None
+    m = re.search(r"(\d{4})-(\d{2})-(\d{2})", nome)
+    if m:
+        data = f"{m.group(3)}/{m.group(2)}/{m.group(1)}"
+    m = re.search(r"\bat[ _]+(\d{1,2})[ .:h_-](\d{2})", nome, re.I)
+    if m:
+        hora = f"{int(m.group(1)):02d}:{m.group(2)}"
+    m = re.search(r"(20\d{2})(\d{2})(\d{2})[_-](\d{2})(\d{2})\d{2}", nome)
+    if m:
+        data = data or f"{m.group(3)}/{m.group(2)}/{m.group(1)}"
+        hora = hora or f"{m.group(4)}:{m.group(5)}"
+    if hora and (int(hora[:2]) > 23 or int(hora[3:]) > 59):
+        hora = None
+    return data, hora
+
+
+def completar_pelo_carimbo(dados: dict, nome_arquivo: str) -> dict:
+    """Coordenada, data e hora conferidas aqui, sem depender de contas do modelo."""
+    coord = ler_coordenada(dados.get("coordenada_texto"))
+    if coord:
+        dados["latitude"], dados["longitude"] = coord
+    dados["data"] = normalizar_data(dados.get("data")) or dados.get("data")
+    data_nome, hora_nome = data_hora_do_nome(nome_arquivo)
+    dados["data"] = dados.get("data") or data_nome
+    dados["hora"] = dados.get("hora") or hora_nome
+    if not dados.get("codigo") and dados.get("rotulo"):
+        dados["codigo"] = dados["rotulo"]
+    if dados.get("dres"):
+        dados["dres"]["observacao_campo"] = encurtar_obs(dados["dres"].get("observacao_campo"))
     return dados
 
 
@@ -236,7 +355,20 @@ def buscar_altitude(lat: float, lon: float) -> Optional[int]:
 
 
 def classe_iqea(iqea: float) -> str:
-    return next(nome for limite, nome in CLASSES_IQEA if round(iqea, 1) >= limite)
+    """Classe pelo valor exato, como no relatório: 1,96 é MUITO RUIM, 2,00 é RUIM."""
+    return next(nome for limite, nome in CLASSES_IQEA if round(iqea, 2) >= limite)
+
+
+def encurtar_obs(t: Optional[str], maximo: int = 80) -> str:
+    """Observação no estilo da planilha: corta no fim da última frase que cabe em 'maximo' caracteres."""
+    s = re.sub(r"\s+", " ", t or "").strip()
+    if len(s) <= maximo:
+        return s
+    corte = s[:maximo]
+    fim = corte.rfind(". ")
+    if fim >= 15:
+        return corte[:fim + 1]
+    return re.sub(r"[,;:]$", "", corte[:corte.rfind(" ")]) + "."
 
 
 def numero(v) -> Optional[float]:
@@ -337,10 +469,54 @@ def vazio(v) -> bool:
     return v is None or v == ""
 
 
+class Estilos:
+    """Estilos da pasta (styles.xml): cria, quando preciso, a variante '2 casas decimais' de um estilo de célula."""
+
+    def __init__(self, doc):
+        self.doc, self.alterado, self.cache = doc, False, {}
+
+    def duas_casas(self, s: str) -> str:
+        if self.doc is None:
+            return s
+        chave = s or "0"
+        if chave in self.cache:
+            return self.cache[chave]
+        xfss = self.doc.getElementsByTagName("cellXfs")
+        if not xfss:
+            return s
+        xfs = xfss[0]
+        lista = _filhos(xfs, "xf")
+        base = lista[int(chave)] if int(chave) < len(lista) else (lista[0] if lista else None)
+        if base is None:
+            return s
+        if base.getAttribute("numFmtId") == "4":
+            self.cache[chave] = chave
+            return chave
+        novo = base.cloneNode(True)
+        novo.setAttribute("numFmtId", "4")  # formato interno do Excel "#,##0.00"
+        novo.setAttribute("applyNumberFormat", "1")
+        xfs.appendChild(novo)
+        idx = str(len(_filhos(xfs, "xf")) - 1)
+        xfs.setAttribute("count", str(int(idx) + 1))
+        self.alterado = True
+        self.cache[chave] = idx
+        return idx
+
+
 class Aba:
-    def __init__(self, nome: str, caminho: str, doc, compartilhadas: list):
+    def __init__(self, nome: str, caminho: str, doc, compartilhadas: list, estilos: Estilos):
         self.nome, self.caminho, self.doc, self.compartilhadas = nome, caminho, doc, compartilhadas
+        self.estilos = estilos
         self.sd = doc.getElementsByTagName("sheetData")[0]
+
+    def duas_casas(self, r: int, c: int):
+        """Mostra a célula com 2 casas decimais (IQEA como no relatório), mantendo borda, fonte e alinhamento."""
+        el = self._celula(r, c, False)
+        if el is None:
+            return
+        s = self.estilos.duas_casas(el.getAttribute("s"))
+        if s and s != "0":
+            el.setAttribute("s", s)
 
     def _linhas(self) -> list:
         return _filhos(self.sd, "row")
@@ -537,6 +713,7 @@ class Pasta:
         self.wb = self.xml("xl/workbook.xml")
         self.rels = self.xml("xl/_rels/workbook.xml.rels")
         self.desenhos = {}
+        self.estilos = Estilos(self.xml("xl/styles.xml"))
 
         compartilhadas = []
         ss = self.xml("xl/sharedStrings.xml")
@@ -548,7 +725,7 @@ class Pasta:
         for sh in self.wb.getElementsByTagName("sheet"):
             rid = sh.getAttributeNS(NS_REL, "id") or sh.getAttribute("r:id")
             caminho_aba = "xl/" + re.sub(r"^/?(xl/)?", "", alvos[rid])
-            self.abas.append(Aba(sh.getAttribute("name"), caminho_aba, self.xml(caminho_aba), compartilhadas))
+            self.abas.append(Aba(sh.getAttribute("name"), caminho_aba, self.xml(caminho_aba), compartilhadas, self.estilos))
 
     def xml(self, caminho: str):
         dados = self.arquivos.get(caminho)
@@ -587,7 +764,7 @@ class Pasta:
         for sv in raiz.getElementsByTagName("sheetView"):
             _remover_attr(sv, "tabSelected")
 
-        aba = Aba(nome, caminho, doc, modelo.compartilhadas)
+        aba = Aba(nome, caminho, doc, modelo.compartilhadas, self.estilos)
         for r in aba.pontos():
             for x in range(r, r + LINHAS_POR_PONTO):
                 for c in range(COL_COD, COL_LEITURA + 1):
@@ -703,6 +880,8 @@ class Pasta:
             self.arquivos[a.caminho] = _serializar(a.doc)
         for caminho, doc in self.desenhos.items():
             self.arquivos[caminho] = _serializar(doc)
+        if self.estilos.alterado and self.estilos.doc is not None:
+            self.arquivos["xl/styles.xml"] = _serializar(self.estilos.doc)
         for calc in self.wb.getElementsByTagName("calcPr"):
             calc.setAttribute("fullCalcOnLoad", "1")  # o Excel recalcula as fórmulas ao abrir
         self.arquivos["xl/workbook.xml"] = _serializar(self.wb)
@@ -768,12 +947,13 @@ def lancar_dres(aba: Aba, linha: int, dres: Optional[dict], sobrescrever: bool) 
     pares = [(numero(aba.ler(r, COL_E)), numero(aba.ler(r, COL_Q))) for r in linhas]
     pares = [(e, q) for e, q in pares if e and q]
     if pares:
-        iqea = round(sum(e * q for e, q in pares) / sum(e for e, _ in pares) + 1e-9, 1)
+        iqea = round(sum(e * q for e, q in pares) / sum(e for e, _ in pares) + 1e-9, 2)  # 2 casas, como no relatório
         if sobrescrever or vazio(aba.ler(linha, COL_IQEA)):
             aba.escrever(linha, COL_IQEA, iqea)
+            aba.duas_casas(linha, COL_IQEA)
         if sobrescrever or vazio(aba.ler(linha, COL_LEITURA)):
             aba.escrever(linha, COL_LEITURA, classe_iqea(iqea))
-        log.append(f"IQEA {f'{iqea:g}'.replace('.', ',')} {classe_iqea(iqea)}")
+        log.append(f"IQEA {f'{iqea:.2f}'.replace('.', ',')} {classe_iqea(iqea)}")
     return log
 
 
@@ -820,7 +1000,9 @@ def lancar(pasta: Pasta, c: dict, args) -> str:
     if c.get("latitude") is not None and c.get("longitude") is not None:
         escrever_se_vazio(aba, linha, COL_LAT, decimal_para_gms(c["latitude"], "lat"), sob, log, "latitude")
         escrever_se_vazio(aba, linha, COL_LON, decimal_para_gms(c["longitude"], "lon"), sob, log, "longitude")
-        if args.altitude and (sob or vazio(aba.ler(linha, COL_ALT))):
+        if c.get("altitude_m") is not None:
+            escrever_se_vazio(aba, linha, COL_ALT, round(c["altitude_m"]), sob, log, "altitude")
+        elif args.altitude and (sob or vazio(aba.ler(linha, COL_ALT))):
             escrever_se_vazio(aba, linha, COL_ALT, buscar_altitude(c["latitude"], c["longitude"]), True, log, "altitude")
 
     log += lancar_dres(aba, linha, c.get("dres"), sob)
@@ -866,6 +1048,8 @@ def main():
     ap.add_argument("--sobrescrever", action="store_true", help="substitui valores já existentes")
     ap.add_argument("--obs-completa", action="store_true", help="copia também a observação do app para a coluna OBS")
     ap.add_argument("--sem-dres", action="store_true", help="não avalia o DRES pelas fotos (só transcreve os dados)")
+    ap.add_argument("--referencia", default="",
+                    help='o que a equipe viu no campo, para o Claude levar em conta (ex.: "Aroeira: IQEA de campo abaixo de 2")')
     ap.add_argument("--so-calcular", action="store_true",
                     help="não lê prints: só calcula IQEA e Leitura dos pontos que já têm E e Q na planilha")
     ap.add_argument("--so-coletas", action="store_true",
@@ -874,6 +1058,7 @@ def main():
     args = ap.parse_args()
 
     entrada = Path(args.planilha)
+    referencia = args.referencia.strip()[:500]
     saida = Path(args.saida) if args.saida else entrada.with_name(entrada.stem + "_preenchida.xlsx")
     cache_arq = saida.with_suffix(".leituras.json")
     cache = json.loads(cache_arq.read_text(encoding="utf-8")) if cache_arq.exists() else {}
@@ -900,6 +1085,12 @@ def main():
     for f in fotos:
         if f.name in cache and not args.sem_dres and cache[f.name].get("dres") is None:
             del cache[f.name]  # lido antes sem DRES: lê de novo com a avaliação
+        elif f.name in cache and "tipo_imagem" not in cache[f.name]:
+            del cache[f.name]  # lido na versão antiga (sem carimbo e régua DRES nova): lê de novo
+        elif f.name in cache and not args.sem_dres and cache[f.name].get("_referencia", "") != referencia:
+            del cache[f.name]  # lido com outra referência de campo: lê de novo
+    if referencia and not args.sem_dres:
+        print(f"Referência de campo: {referencia}")
     faltam = [f for f in fotos if f.name not in cache]
     ja_lidos = len(fotos) - len(faltam)
     print(f"Lendo {len(faltam)} print(s), {SIMULTANEOS} ao mesmo tempo"
@@ -910,16 +1101,21 @@ def main():
         client = anthropic.Anthropic(max_retries=5)
         feitos = 0
         with ThreadPoolExecutor(max_workers=SIMULTANEOS) as pool:
-            tarefas = {pool.submit(ler_print, client, f, args.modelo, not args.sem_dres): f for f in faltam}
+            tarefas = {pool.submit(ler_print, client, f, args.modelo, not args.sem_dres, referencia): f for f in faltam}
             for tarefa in as_completed(tarefas):
                 f = tarefas[tarefa]
                 feitos += 1
                 try:
                     cache[f.name] = tarefa.result()
-                except anthropic.AuthenticationError:
+                    cache[f.name]["_referencia"] = "" if args.sem_dres else referencia
+                except (anthropic.AuthenticationError, TypeError) as e:
+                    # TypeError: o SDK não achou chave nenhuma ("Could not resolve authentication method")
+                    if isinstance(e, TypeError) and "authentication" not in str(e).lower():
+                        raise
                     for t in tarefas:
                         t.cancel()
-                    sys.exit("Chave da API inválida ou ausente. Rode: set ANTHROPIC_API_KEY=sk-ant-...")
+                    sys.exit("Chave da API inválida ou ausente. Rode: setx ANTHROPIC_API_KEY sk-ant-... "
+                             "e abra uma janela nova do Prompt de Comando.")
                 except (anthropic.APIError, RuntimeError) as e:
                     print(f"  ! [{feitos}/{len(faltam)}] {f.name}: erro na leitura ({e})")
                     continue
