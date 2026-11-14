@@ -5,7 +5,9 @@ PREENCHER PLANILHA DRES A PARTIR DOS PRINTS DO "RELATÓRIO DE COLETAS"
 
 Lê os prints (fotos de tela) dos cartões do Relatório de coletas do portal
 — aqueles com "Coleta 1002-B01", talhão, data e hora, coordenadas etc. —
-e preenche a planilha de campo DRES (aba "LEITURAS DDMM").
+ou as fotos de campo do bloco/bandeja com o carimbo da câmera GPS (data,
+coordenada, altitude e nome do ponto, ex.: "Santa Maria 24"; a hora vem do
+nome do arquivo) e preenche a planilha de campo DRES (aba "LEITURAS DDMM").
 
 O que é preenchido em cada ponto:
     A  PONTO        número do ponto (só se estiver vazio)
@@ -105,12 +107,16 @@ class AvaliacaoDRES(BaseModel):
 
 
 class Coleta(BaseModel):
-    codigo: Optional[str] = Field(None, description='Código da coleta, ex.: "1002-B01" (do título "Coleta 1002-B01")')
+    tipo_imagem: Optional[str] = Field(None, description='"cartao" = print do cartão do Relatório de coletas; "foto_campo" = foto do bloco/bandeja/trincheira, com ou sem carimbo da câmera')
+    rotulo: Optional[str] = Field(None, description='Foto de campo: a última linha do carimbo da câmera, que identifica o ponto (ex.: "Santa Maria 24"). Cartão: nulo')
+    coordenada_texto: Optional[str] = Field(None, description='Coordenada copiada exatamente como aparece (do cartão ou do carimbo), ex.: \'20°53\'36,679"S 48°44\'22,344"W\' ou "20.48073677S 49.01156803W"')
+    altitude_m: Optional[float] = Field(None, description='Altitude em metros, se aparecer (ex.: "Altitude:552.8msnm" -> 552.8)')
+    codigo: Optional[str] = Field(None, description='Código da coleta, ex.: "1002-B01" (do título "Coleta 1002-B01"). Foto de campo: o mesmo texto de rotulo')
     fazenda: Optional[str] = Field(None, description="Nome da fazenda/estado da linha azul do topo, ex.: MATO GROSSO")
     talhao: Optional[str] = Field(None, description='Valor de "TALHÃO DA COLETA"')
     area_bloco_ha: Optional[float] = Field(None, description='Valor de "ÁREA DO BLOCO" em hectares, como número')
     talhoes_bloco: Optional[str] = Field(None, description='Valor de "TALHÕES DO BLOCO"')
-    data: Optional[str] = Field(None, description='Data de "DATA E HORA" no formato DD/MM/AAAA')
+    data: Optional[str] = Field(None, description='Data no formato DD/MM/AAAA (do cartão ou do carimbo; "5 de novembro de 2026" -> 05/11/2026)')
     hora: Optional[str] = Field(None, description='Hora de "DATA E HORA" no formato HH:MM (24 h)')
     latitude: Optional[float] = Field(None, description='Primeiro número de "COORDENADAS", em graus decimais, com sinal')
     longitude: Optional[float] = Field(None, description='Segundo número de "COORDENADAS", em graus decimais, com sinal')
@@ -138,23 +144,35 @@ Como o DRES funciona:
         raízes raras, tortas, achatadas ou com crescimento lateral (desviando da camada); fissuras horizontais.
     1 - Estrutura maciça ou laminar, muito compactada, sem agregação nem porosidade visível; raízes ausentes ou
         totalmente desviadas.
-- Índice do ponto: IQEA = soma(E x Qe) / soma(E). Ex.: camadas 5 cm Qe 3 e 20 cm Qe 2 -> (15+40)/25 = 2,2.
+- Índice do ponto: IQEA = soma(E x Qe) / soma(E).
 - Classes do IQEA: 5,0-6,0 Muito bom | 4,0-4,9 Bom | 3,0-3,9 Regular | 2,0-2,9 Ruim | 1,0-1,9 Muito ruim.
 
-Sinais típicos nas fotos: camada superficial solta/grumosa de poucos cm sobre camada adensada em blocos; faces lisas e
-fissuras horizontais indicam compactação (Qe 1-2); raízes que correm na horizontal ("crescimento lateral",
-"raízes superficiais") indicam impedimento físico; torrões que se desfazem em grumos com raízes finas indicam Qe 5-6.
-Seja realista e conservador: na dúvida entre duas notas, escolha a que melhor explica o que se vê no bloco e informe
-a confiança. Não invente camadas que não aparecem."""
+Como ler o bloco na foto:
+- Bloco que sai inteiro da pá e fica na bandeja como uma peça só, coeso, com faces lisas e trincas planas ou
+  horizontais (aspecto de "tijolo" ou de placas), sem agregados arredondados, sem poros nem raízes visíveis: Qe 1.
+  É o caso mais comum em áreas de cana e grãos com tráfego de máquinas; não suba a nota sem evidência.
+- Qe 2 só quando o bloco já se parte em torrões grandes e angulosos, com alguma porosidade ou raízes nas fissuras.
+- Qe 3 ou mais exige ver agregação de verdade: blocos menores que se desfazem, poros, raízes distribuídas, grumos.
+- A camada de cima costuma ser uma faixa fina (2 a 8 cm) mais solta, com palha, grumos ou raízes. Se ela não
+  aparecer na foto, não a invente: use uma camada só de 25 cm.
+- Não há valor padrão: cada foto tem as suas espessuras e notas. Meça as espessuras pela proporção do bloco
+  (25 cm de altura) e escolha a nota pelo que se vê, não por hábito.
+- Numa foto só da bandeja vista de cima, as camadas são difíceis de separar: avalie o conjunto e informe confiança
+  baixa ou média.
+Na dúvida entre duas notas, fique com a menor e informe a confiança."""
 
 INSTRUCOES = (
-    "Esta imagem é um print de um cartão do 'Relatório de coletas' de amostragem de solo. "
-    "Transcreva exatamente os campos de texto do cartão (lado esquerdo). Ignore o texto pequeno sobreposto às fotos. "
-    "Copie os números exatamente como aparecem, convertendo a vírgula decimal da área em ponto. "
-    "Se um campo não aparecer ou estiver ilegível, deixe nulo."
+    "A imagem é de amostragem de solo e pode ser de dois tipos. "
+    "(1) Print de um cartão do 'Relatório de coletas' (título 'Coleta 1002-B01', talhão, data e hora, coordenadas): "
+    "transcreva os campos de texto do cartão e ignore o texto pequeno sobreposto às fotos dele. "
+    "(2) Foto de campo do bloco, da bandeja ou da trincheira, em geral com o carimbo de um aplicativo de câmera GPS no "
+    "canto (data, coordenada, altitude, velocidade e, na última linha, o nome do ponto, ex.: 'Santa Maria 24'): "
+    "leia o carimbo; o nome do ponto vai em rotulo e também em codigo; a hora quase nunca aparece no carimbo, deixe nula. "
+    "Copie a coordenada exatamente como está em coordenada_texto e não converta. "
+    "Copie os números exatamente como aparecem. Se um campo não aparecer ou estiver ilegível, deixe nulo."
 )
 INSTRUCOES_DRES = (
-    " Depois, use as fotos do cartão (trincheira, bloco e bandeja) para fazer a avaliação DRES do ponto: "
+    " Depois, use a foto (ou as fotos do cartão: trincheira, bloco e bandeja) para fazer a avaliação DRES do ponto: "
     "camadas de cima para baixo com espessura e nota Qe, e uma observação curta de campo."
 )
 
@@ -185,6 +203,87 @@ def ler_print(client: anthropic.Anthropic, caminho: Path, modelo: str, avaliar: 
     dados = resp.parsed_output.model_dump()
     if not avaliar:
         dados["dres"] = None
+    return completar_pelo_carimbo(dados, caminho.name)
+
+
+# --------------------------------------------------------------------------
+# Carimbo das câmeras GPS e nome do arquivo das fotos de campo
+# --------------------------------------------------------------------------
+MESES = {"janeiro": 1, "fevereiro": 2, "marco": 3, "abril": 4, "maio": 5, "junho": 6, "julho": 7,
+         "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12}
+
+
+def ler_coordenada(texto: Optional[str]):
+    """'20°53'36,679"S 48°44'22,344"W' ou '20.48073677S 49.01156803W' -> (lat, lon) em graus decimais."""
+    if not texto:
+        return None
+    t = re.sub(r"[′’']", "'", texto)
+    t = re.sub(r'[″”"]', '"', t).replace("º", "°")
+    num = lambda x: float(x.replace(",", "."))
+    valores = [(int(m[0]) + int(m[1]) / 60 + num(m[2]) / 3600, m[3].upper()) for m in
+               re.findall(r"(\d{1,3})\s*°\s*(\d{1,2})\s*'\s*(\d{1,2}(?:[.,]\d+)?)\s*\"?\s*([NSLOEW])", t, re.I)]
+    if len(valores) < 2:
+        valores = [(num(m[0]), m[1].upper()) for m in
+                   re.findall(r"(-?\d{1,3}[.,]\d{3,})\s*°?\s*([NSLOEW])?(?![a-z])", t, re.I)]
+    if len(valores) < 2:
+        return None
+    (a, ha), (b, hb) = valores[0], valores[1]
+    if ha in "LOEW" and ha and hb in "NS" and hb:
+        (a, ha), (b, hb) = (b, hb), (a, ha)
+    sinal = lambda v, h: -abs(v) if h in ("S", "W", "O") else v
+    lat, lon = sinal(a, ha), sinal(b, hb)
+    if abs(lat) > 90 or abs(lon) > 180:
+        return None
+    return round(lat, 7), round(lon, 7)
+
+
+def normalizar_data(texto: Optional[str]) -> Optional[str]:
+    """'06/11/2026', '5 de novembro de 2026', '2026-11-05' -> 'DD/MM/AAAA'."""
+    if not texto:
+        return None
+    t = sem_acento(texto.lower())
+    m = re.search(r"(\d{1,2})/(\d{1,2})/(\d{2,4})", t)
+    if m:
+        ano = m.group(3) if len(m.group(3)) == 4 else "20" + m.group(3)
+        return f"{int(m.group(1)):02d}/{int(m.group(2)):02d}/{ano}"
+    m = re.search(r"(\d{1,2})\s+de\s+([a-z]+)\s+de\s+(\d{4})", t)
+    if m and m.group(2) in MESES:
+        return f"{int(m.group(1)):02d}/{MESES[m.group(2)]:02d}/{m.group(3)}"
+    m = re.search(r"(\d{4})-(\d{2})-(\d{2})", t)
+    if m:
+        return f"{m.group(3)}/{m.group(2)}/{m.group(1)}"
+    return None
+
+
+def data_hora_do_nome(nome: str):
+    """'2026-11-05 at 08 50.jpeg', 'WhatsApp Image 2026-11-09 at 17.23.00.jpeg', 'IMG_20261105_085012.jpg'."""
+    data = hora = None
+    m = re.search(r"(\d{4})-(\d{2})-(\d{2})", nome)
+    if m:
+        data = f"{m.group(3)}/{m.group(2)}/{m.group(1)}"
+    m = re.search(r"\bat[ _]+(\d{1,2})[ .:h_-](\d{2})", nome, re.I)
+    if m:
+        hora = f"{int(m.group(1)):02d}:{m.group(2)}"
+    m = re.search(r"(20\d{2})(\d{2})(\d{2})[_-](\d{2})(\d{2})\d{2}", nome)
+    if m:
+        data = data or f"{m.group(3)}/{m.group(2)}/{m.group(1)}"
+        hora = hora or f"{m.group(4)}:{m.group(5)}"
+    if hora and (int(hora[:2]) > 23 or int(hora[3:]) > 59):
+        hora = None
+    return data, hora
+
+
+def completar_pelo_carimbo(dados: dict, nome_arquivo: str) -> dict:
+    """Coordenada, data e hora conferidas aqui, sem depender de contas do modelo."""
+    coord = ler_coordenada(dados.get("coordenada_texto"))
+    if coord:
+        dados["latitude"], dados["longitude"] = coord
+    dados["data"] = normalizar_data(dados.get("data")) or dados.get("data")
+    data_nome, hora_nome = data_hora_do_nome(nome_arquivo)
+    dados["data"] = dados.get("data") or data_nome
+    dados["hora"] = dados.get("hora") or hora_nome
+    if not dados.get("codigo") and dados.get("rotulo"):
+        dados["codigo"] = dados["rotulo"]
     return dados
 
 
@@ -820,7 +919,9 @@ def lancar(pasta: Pasta, c: dict, args) -> str:
     if c.get("latitude") is not None and c.get("longitude") is not None:
         escrever_se_vazio(aba, linha, COL_LAT, decimal_para_gms(c["latitude"], "lat"), sob, log, "latitude")
         escrever_se_vazio(aba, linha, COL_LON, decimal_para_gms(c["longitude"], "lon"), sob, log, "longitude")
-        if args.altitude and (sob or vazio(aba.ler(linha, COL_ALT))):
+        if c.get("altitude_m") is not None:
+            escrever_se_vazio(aba, linha, COL_ALT, round(c["altitude_m"]), sob, log, "altitude")
+        elif args.altitude and (sob or vazio(aba.ler(linha, COL_ALT))):
             escrever_se_vazio(aba, linha, COL_ALT, buscar_altitude(c["latitude"], c["longitude"]), True, log, "altitude")
 
     log += lancar_dres(aba, linha, c.get("dres"), sob)
@@ -900,6 +1001,8 @@ def main():
     for f in fotos:
         if f.name in cache and not args.sem_dres and cache[f.name].get("dres") is None:
             del cache[f.name]  # lido antes sem DRES: lê de novo com a avaliação
+        elif f.name in cache and "tipo_imagem" not in cache[f.name]:
+            del cache[f.name]  # lido na versão antiga (sem carimbo e régua DRES nova): lê de novo
     faltam = [f for f in fotos if f.name not in cache]
     ja_lidos = len(fotos) - len(faltam)
     print(f"Lendo {len(faltam)} print(s), {SIMULTANEOS} ao mesmo tempo"
