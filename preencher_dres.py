@@ -68,6 +68,7 @@ import argparse
 import base64
 import datetime as dt
 import json
+import math
 import mimetypes
 import re
 import sys
@@ -289,6 +290,42 @@ def data_hora_do_nome(nome: str):
     if hora and (int(hora[:2]) > 23 or int(hora[3:]) > 59):
         hora = None
     return data, hora
+
+
+def padronizar_codigo(c: dict) -> dict:
+    """Código curto e padronizado, no estilo do relatório ("1005-T4"): "Santa Rosa Talhão: 13" -> "Santa Rosa T13".
+    Só mexe em códigos que falam de talhão ou que não têm número; códigos do cartão ("1002-B01") ficam como estão."""
+    texto = re.sub(r"\s+", " ", c.get("codigo") or c.get("rotulo") or "").strip()
+    m = re.search(r"talh(?:[aã]o|ao)?\.?\s*:?\s*(\d+[A-Za-z]?)", texto, re.I)
+    talhao = (c.get("talhao") or "").strip() or None
+    if m:
+        fazenda = re.sub(r"[\s,;:\-–]+$", "", texto[:m.start()]).strip()
+        talhao = talhao or m.group(1)
+    elif talhao and texto and not re.search(r"\d", texto):
+        fazenda = texto  # só o nome da fazenda; o talhão veio separado
+    else:
+        return c
+    if not talhao:
+        return c
+    return {**c, "talhao": talhao, "codigo": f"{fazenda} T{talhao}" if fazenda else f"T{talhao}"}
+
+
+def completar_fazendas(lista: list) -> list:
+    """Código sem fazenda ("T30"): usa a fazenda mais comum entre as coletas do mesmo dia."""
+    contagem = {}
+    for c in lista:
+        m = re.match(r"^(.+?) T\d+[A-Za-z]?$", c.get("codigo") or "")
+        if m:
+            dia = contagem.setdefault(c.get("data") or "", {})
+            dia[m.group(1)] = dia.get(m.group(1), 0) + 1
+    res = []
+    for c in lista:
+        dia = contagem.get(c.get("data") or "")
+        if re.match(r"^T\d+[A-Za-z]?$", c.get("codigo") or "") and dia:
+            fazenda = max(dia.items(), key=lambda kv: kv[1])[0]
+            c = {**c, "codigo": f"{fazenda} {c['codigo']}"}
+        res.append(c)
+    return res
 
 
 def completar_pelo_carimbo(dados: dict, nome_arquivo: str) -> dict:
@@ -622,6 +659,69 @@ class Aba:
 
     def pontos(self) -> list:
         return [r for _, ps in self.paginas() for r in ps]
+
+    def _largura_padrao(self) -> float:
+        fs = self.doc.getElementsByTagName("sheetFormatPr")
+        f = fs[0] if fs else None
+        if f is not None and f.getAttribute("defaultColWidth"):
+            return float(f.getAttribute("defaultColWidth"))
+        base = float(f.getAttribute("baseColWidth")) if f is not None and f.getAttribute("baseColWidth") else 8
+        return base + 0.7109375
+
+    def _coluna_el(self, c: int):
+        """Elemento <col> só da coluna c (separa faixas min..max e cria o elemento, se faltar)."""
+        cols_l = self.doc.getElementsByTagName("cols")
+        if cols_l:
+            cols = cols_l[0]
+        else:
+            cols = self.doc.createElementNS(NS, "cols")
+            self.doc.documentElement.insertBefore(cols, self.sd)
+        for col in _filhos(cols, "col"):
+            mn, mx = int(col.getAttribute("min")), int(col.getAttribute("max"))
+            if not mn <= c <= mx:
+                continue
+            if mn == mx:
+                return col
+
+            def faixa(a, b):
+                nova = col.cloneNode(True)
+                nova.setAttribute("min", str(a))
+                nova.setAttribute("max", str(b))
+                return nova
+            if mn < c:
+                cols.insertBefore(faixa(mn, c - 1), col)
+            if mx > c:
+                cols.insertBefore(faixa(c + 1, mx), col.nextSibling)
+            col.setAttribute("min", str(c))
+            col.setAttribute("max", str(c))
+            return col
+        nova = self.doc.createElementNS(NS, "col")
+        nova.setAttribute("min", str(c))
+        nova.setAttribute("max", str(c))
+        nova.setAttribute("width", repr(self._largura_padrao()))
+        depois = next((x for x in _filhos(cols, "col") if int(x.getAttribute("min")) > c), None)
+        cols.insertBefore(nova, depois)
+        return nova
+
+    def ajustar_coluna_codigo(self, min_obs: float = 40):
+        """Alarga a coluna do código (B) até caber o código mais longo e tira a mesma largura da OBS (C),
+        para a página de impressão continuar do mesmo tamanho. A OBS não fica menor que min_obs."""
+        maior = max((len(v.strip()) for v in (self.ler(r, COL_COD) for r in self.pontos()) if isinstance(v, str)), default=0)
+        if not maior:
+            return None
+        col_b, col_c = self._coluna_el(COL_COD), self._coluna_el(COL_OBS)
+        b = float(col_b.getAttribute("width") or 0) or self._largura_padrao()
+        c = float(col_c.getAttribute("width") or 0) or self._largura_padrao()
+        precisa = math.ceil(maior * 1.15 + 2)  # negrito 11 pt ocupa um pouco mais que 1 caractere por unidade
+        if precisa <= b:
+            return None
+        ganho = min(precisa - b, max(0.0, c - min_obs))
+        if ganho <= 0:
+            return None
+        for col, w in ((col_b, b + ganho), (col_c, c - ganho)):
+            col.setAttribute("width", repr(w))
+            col.setAttribute("customWidth", "1")
+        return b + ganho, c - ganho
 
     @staticmethod
     def _mover_linha(row, nova: int):
@@ -1140,6 +1240,10 @@ def main():
         return d
     coletas.sort(key=ordem)
 
+    # códigos curtos ("Santa Rosa T13") e fazenda dos que só trazem o talhão ("T30"), pelo dia
+    padronizadas = completar_fazendas([padronizar_codigo(c) for _, c in coletas])
+    coletas = [(nome, c) for (nome, _), c in zip(coletas, padronizadas)]
+
     pasta = Pasta(entrada)
     print("\nLançando na planilha...")
     tocados = set()
@@ -1149,6 +1253,10 @@ def main():
         m = re.match(r"(LEITURAS \d{4}) linha (\d+)", msg)
         if m:
             tocados.add((m.group(1), int(m.group(2))))
+    for nome_aba_tocada in {a for a, _ in tocados}:  # código legível: alarga a coluna B, tirando da OBS
+        aba_tocada = pasta.aba(nome_aba_tocada)
+        if aba_tocada is not None:
+            aba_tocada.ajustar_coluna_codigo()
     if not args.so_coletas:
         print("\nIQEA e Leitura dos pontos já anotados:")
         calcular_todos(pasta, tocados, args.sobrescrever)
