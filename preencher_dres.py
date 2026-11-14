@@ -57,6 +57,11 @@ Chave da API da Anthropic (uma vez por janela do Prompt de Comando):
 Uso:
     python preencher_dres.py --planilha DRES_Planilha_de_Campo_AROEIRA.xlsx --fotos C:\\prints
     python preencher_dres.py --planilha DRES.xlsx --fotos print1.png print2.png --altitude
+    python preencher_dres.py --planilha DRES.xlsx --fotos . --referencia "Aroeira: IQEA de campo abaixo de 2"
+
+--referencia: o que a equipe viu no campo. O Claude leva em conta, mas continua
+avaliando cada foto pelo que ela mostra e avisa na observação quando a foto
+contradiz a referência. Mudar a referência faz as fotos serem lidas de novo.
 """
 
 import argparse
@@ -177,7 +182,17 @@ INSTRUCOES_DRES = (
 )
 
 
-def ler_print(client: anthropic.Anthropic, caminho: Path, modelo: str, avaliar: bool) -> dict:
+def texto_referencia(ref: str) -> str:
+    """Referência da equipe de campo, quando informada: contexto, sem passar por cima da foto."""
+    if not ref:
+        return ""
+    return ("\n\nReferência da equipe que esteve no campo (informação de contexto sobre a área, escrita pelo usuário): "
+            f'"""{ref.replace(chr(34) * 3, chr(34))}"""\n'
+            "Leve essa referência em conta, mas avalie esta foto pelo que ela mostra. Se a foto contradizer a referência, "
+            "fique com o que a foto mostra e diga isso na observação de campo.")
+
+
+def ler_print(client: anthropic.Anthropic, caminho: Path, modelo: str, avaliar: bool, referencia: str = "") -> dict:
     tipo = mimetypes.guess_type(caminho.name)[0] or "image/png"
     if tipo == "image/jpg":
         tipo = "image/jpeg"
@@ -193,7 +208,7 @@ def ler_print(client: anthropic.Anthropic, caminho: Path, modelo: str, avaliar: 
             "role": "user",
             "content": [
                 {"type": "image", "source": {"type": "base64", "media_type": tipo, "data": dados}},
-                {"type": "text", "text": INSTRUCOES + (INSTRUCOES_DRES if avaliar else "")},
+                {"type": "text", "text": INSTRUCOES + (INSTRUCOES_DRES + texto_referencia(referencia) if avaliar else "")},
             ],
         }],
         output_format=Coleta,
@@ -967,6 +982,8 @@ def main():
     ap.add_argument("--sobrescrever", action="store_true", help="substitui valores já existentes")
     ap.add_argument("--obs-completa", action="store_true", help="copia também a observação do app para a coluna OBS")
     ap.add_argument("--sem-dres", action="store_true", help="não avalia o DRES pelas fotos (só transcreve os dados)")
+    ap.add_argument("--referencia", default="",
+                    help='o que a equipe viu no campo, para o Claude levar em conta (ex.: "Aroeira: IQEA de campo abaixo de 2")')
     ap.add_argument("--so-calcular", action="store_true",
                     help="não lê prints: só calcula IQEA e Leitura dos pontos que já têm E e Q na planilha")
     ap.add_argument("--so-coletas", action="store_true",
@@ -975,6 +992,7 @@ def main():
     args = ap.parse_args()
 
     entrada = Path(args.planilha)
+    referencia = args.referencia.strip()[:500]
     saida = Path(args.saida) if args.saida else entrada.with_name(entrada.stem + "_preenchida.xlsx")
     cache_arq = saida.with_suffix(".leituras.json")
     cache = json.loads(cache_arq.read_text(encoding="utf-8")) if cache_arq.exists() else {}
@@ -1003,6 +1021,10 @@ def main():
             del cache[f.name]  # lido antes sem DRES: lê de novo com a avaliação
         elif f.name in cache and "tipo_imagem" not in cache[f.name]:
             del cache[f.name]  # lido na versão antiga (sem carimbo e régua DRES nova): lê de novo
+        elif f.name in cache and not args.sem_dres and cache[f.name].get("_referencia", "") != referencia:
+            del cache[f.name]  # lido com outra referência de campo: lê de novo
+    if referencia and not args.sem_dres:
+        print(f"Referência de campo: {referencia}")
     faltam = [f for f in fotos if f.name not in cache]
     ja_lidos = len(fotos) - len(faltam)
     print(f"Lendo {len(faltam)} print(s), {SIMULTANEOS} ao mesmo tempo"
@@ -1013,12 +1035,13 @@ def main():
         client = anthropic.Anthropic(max_retries=5)
         feitos = 0
         with ThreadPoolExecutor(max_workers=SIMULTANEOS) as pool:
-            tarefas = {pool.submit(ler_print, client, f, args.modelo, not args.sem_dres): f for f in faltam}
+            tarefas = {pool.submit(ler_print, client, f, args.modelo, not args.sem_dres, referencia): f for f in faltam}
             for tarefa in as_completed(tarefas):
                 f = tarefas[tarefa]
                 feitos += 1
                 try:
                     cache[f.name] = tarefa.result()
+                    cache[f.name]["_referencia"] = "" if args.sem_dres else referencia
                 except anthropic.AuthenticationError:
                     for t in tarefas:
                         t.cancel()
